@@ -33,29 +33,29 @@
 
 ## Milestone: Auth
 
-- [ ] POST /api/auth/register
-- [ ] POST /api/auth/login
-- [ ] JWT middleware
-- [ ] In-memory rate limiter
-- [ ] Cloudinary integration
-- [ ] Avatar upload flow
-- [ ] Role-based middleware
-- [ ] Resource ownership middleware
+- [x] POST /api/auth/register ✅
+- [x] POST /api/auth/login ✅
+- [x] JWT middleware ✅
+- [x] In-memory rate limiter ✅
+- [ ] Cloudinary integration (deferred)
+- [ ] Avatar upload flow (deferred)
+- [ ] Role-based middleware (deferred - no role in User table)
+- [ ] Resource ownership middleware (deferred)
 
 ---
 
 ## Milestone: Chat
 
-- [ ] GET/POST /api/channels
-- [ ] PATCH/DELETE /api/channels/:id
-- [ ] GET /api/channels/:id/messages
-- [ ] POST /api/channels/:id/messages
-- [ ] PATCH /api/messages/:id
-- [ ] DELETE /api/messages/:id
-- [ ] GET /api/messages/search
-- [ ] POST /api/messages/:id/reactions
-- [ ] DELETE /api/messages/:id/reactions/:emoji
-- [ ] GET/POST/DELETE /api/channels/:id/pins
+- [x] GET/POST /api/channels ✅
+- [x] PATCH/DELETE /api/channels/:id ✅
+- [x] GET /api/channels/:id/messages ✅
+- [x] POST /api/channels/:id/messages ✅
+- [x] PATCH /api/messages/:id ✅
+- [x] DELETE /api/messages/:id ✅
+- [x] GET /api/messages/search ✅
+- [x] POST /api/messages/:id/reactions ✅
+- [x] DELETE /api/messages/:id/reactions/:emoji ✅
+- [x] GET/POST/DELETE /api/channels/:id/pins ✅
 - [ ] WebSocket: subscribe/unsubscribe
 - [ ] WebSocket: typing indicators
 - [ ] WebSocket: message events
