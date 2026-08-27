@@ -90,18 +90,6 @@
 
 ## Milestone: Frontend Core
 
-- [ ] Tauri setup
-- [ ] Tailwind + shadcn/ui config
-- [ ] Dark theme palette
-- [ ] Layout shell
-- [ ] Zustand stores
-- [ ] WebSocket manager
-- [ ] Theme toggle
-
----
-
-## Milestone: Frontend Core
-
 - [x] Tauri setup ✅
 - [x] Tailwind + design system ✅
 - [x] Dark theme palette ✅
