@@ -31,6 +31,15 @@ export function MessageList() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const subscribe = useWebSocketStore((s) => s.subscribe)
+  const subscribeChannel = useWebSocketStore((s) => s.subscribeChannel)
+
+  // Subscribe to channel when active channel changes
+  useEffect(() => {
+    if (!activeChannelId) return
+
+    // Send channel_join to subscribe to broadcasts
+    subscribeChannel(activeChannelId)
+  }, [activeChannelId, subscribeChannel])
 
   // Fetch messages
   useEffect(() => {
@@ -40,7 +49,23 @@ export function MessageList() {
     fetch(`http://localhost:8080/api/channels/${activeChannelId}/messages?limit=50`)
       .then((res) => res.json())
       .then((data) => {
-        setMessages(Array.isArray(data) ? data : [])
+        if (Array.isArray(data)) {
+          const normalized: Message[] = data.map((item: any) => ({
+            id: item.id,
+            channelId: item.channelId || item.channel_id,
+            authorId: item.authorId || item.author_id,
+            authorName: item.authorName || item.author_name,
+            content: item.content,
+            createdAt: item.createdAt || item.created_at || new Date().toISOString(),
+            editedAt: item.editedAt || item.edited_at,
+            deletedAt: item.deletedAt || item.deleted_at,
+            reactions: item.reactions || [],
+          }))
+          // Reverse so oldest messages are at the top and newest at the bottom
+          setMessages(normalized.reverse())
+        } else {
+          setMessages([])
+        }
         setLoading(false)
       })
       .catch((err) => {
@@ -52,74 +77,124 @@ export function MessageList() {
   // Subscribe to WebSocket messages
   useEffect(() => {
     const unsubscribe = subscribe((message: WSMessage) => {
-      if (message.type === 'message' && message.channelId === activeChannelId) {
-        const newMessage = message.payload as unknown as Message
-        setMessages((prev) => [...prev, newMessage])
+      console.log('[MessageList] WS event:', message.type, 'payload:', message.payload)
+
+      if (message.type === 'message') {
+        const payload = (message.payload || {}) as Record<string, any>
+        const nested = payload.message as Record<string, any> | undefined
+
+        const channelId = (payload.channelId || message.channelId || nested?.channelId) as string
+        const id = (nested?.id || payload.id) as string
+        const authorId = (nested?.authorId || payload.authorId) as string
+        const authorName = (nested?.authorName || payload.authorName) as string | undefined
+        const content = (nested?.content || payload.content) as string
+        const createdAt = (nested?.createdAt || payload.createdAt || new Date().toISOString()) as string
+
+        if (channelId === activeChannelId && id) {
+          console.log('[MessageList] Adding message to list:', id)
+          const newMessage: Message = {
+            id,
+            channelId,
+            authorId: authorId || '',
+            authorName,
+            content: content || '',
+            createdAt,
+          }
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === id)) return prev
+            return [...prev, newMessage]
+          })
+        }
       }
 
-      if (message.type === 'message_edit' && message.channelId === activeChannelId) {
-        const { id, content, editedAt } = message.payload as { id: string; content: string; editedAt: string }
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === id ? { ...msg, content, editedAt } : msg
+      if (message.type === 'message_edit') {
+        const payload = (message.payload || {}) as Record<string, any>
+        const channelId = (payload.channelId || message.channelId) as string
+        const messageId = (payload.messageId || payload.id) as string
+        const content = payload.content as string
+        const editedAt = (payload.editedAt || new Date().toISOString()) as string
+
+        if (channelId === activeChannelId && messageId) {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === messageId ? { ...msg, content, editedAt } : msg
+            )
           )
-        )
+        }
       }
 
-      if (message.type === 'message_delete' && message.channelId === activeChannelId) {
-        const { id } = message.payload as { id: string }
-        setMessages((prev) => prev.filter((msg) => msg.id !== id))
+      if (message.type === 'message_delete') {
+        const payload = (message.payload || {}) as Record<string, any>
+        const channelId = (payload.channelId || message.channelId) as string
+        const messageId = (payload.messageId || payload.id) as string
+
+        if (channelId === activeChannelId && messageId) {
+          setMessages((prev) => prev.filter((msg) => msg.id !== messageId))
+        }
       }
 
-      if (message.type === 'reaction_add' && message.channelId === activeChannelId) {
-        const { messageId, emoji, userId } = message.payload as { messageId: string; emoji: string; userId: string }
-        const currentUserId = useAuthStore.getState().user?.id
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.id === messageId) {
-              const reactions = msg.reactions || []
-              const existing = reactions.find((r) => r.emoji === emoji)
-              if (existing) {
-                return {
-                  ...msg,
-                  reactions: reactions.map((r) =>
-                    r.emoji === emoji
-                      ? { ...r, count: r.count + 1, reacted: r.reacted || userId === currentUserId }
-                      : r
-                  ),
-                }
-              } else {
-                return {
-                  ...msg,
-                  reactions: [...reactions, { emoji, count: 1, reacted: userId === currentUserId }],
+      if (message.type === 'reaction_add') {
+        const payload = (message.payload || {}) as Record<string, any>
+        const channelId = (payload.channelId || message.channelId) as string
+        const messageId = payload.messageId as string
+        const emoji = payload.emoji as string
+        const userId = (payload.userId || payload.user?.id) as string
+
+        if (channelId === activeChannelId && messageId && emoji) {
+          const currentUserId = useAuthStore.getState().user?.id
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === messageId) {
+                const reactions = msg.reactions || []
+                const existing = reactions.find((r) => r.emoji === emoji)
+                if (existing) {
+                  return {
+                    ...msg,
+                    reactions: reactions.map((r) =>
+                      r.emoji === emoji
+                        ? { ...r, count: r.count + 1, reacted: r.reacted || userId === currentUserId }
+                        : r
+                    ),
+                  }
+                } else {
+                  return {
+                    ...msg,
+                    reactions: [...reactions, { emoji, count: 1, reacted: userId === currentUserId }],
+                  }
                 }
               }
-            }
-            return msg
-          })
-        )
+              return msg
+            })
+          )
+        }
       }
 
-      if (message.type === 'reaction_remove' && message.channelId === activeChannelId) {
-        const { messageId, emoji } = message.payload as { messageId: string; emoji: string }
-        setMessages((prev) =>
-          prev.map((msg) => {
-            if (msg.id === messageId) {
-              const reactions = msg.reactions || []
-              return {
-                ...msg,
-                reactions: reactions
-                  .map((r) =>
-                    r.emoji === emoji
-                      ? { ...r, count: r.count - 1, reacted: false }
-                      : r
-                  )
-                  .filter((r) => r.count > 0),
+      if (message.type === 'reaction_remove') {
+        const payload = (message.payload || {}) as Record<string, any>
+        const channelId = (payload.channelId || message.channelId) as string
+        const messageId = payload.messageId as string
+        const emoji = payload.emoji as string
+
+        if (channelId === activeChannelId && messageId && emoji) {
+          setMessages((prev) =>
+            prev.map((msg) => {
+              if (msg.id === messageId) {
+                const reactions = msg.reactions || []
+                return {
+                  ...msg,
+                  reactions: reactions
+                    .map((r) =>
+                      r.emoji === emoji
+                        ? { ...r, count: r.count - 1, reacted: false }
+                        : r
+                    )
+                    .filter((r) => r.count > 0),
+                }
               }
-            }
-            return msg
-          })
-        )
+              return msg
+            })
+          )
+        }
       }
     })
 
@@ -160,8 +235,8 @@ export function MessageList() {
           </div>
         ) : (
           <>
-            {messages.map((msg, index) => (
-              <MessageItem key={msg.id} message={msg} index={index} />
+            {messages.map((msg) => (
+              <MessageItem key={msg.id} message={msg} />
             ))}
             <div ref={bottomRef} />
           </>
@@ -171,7 +246,7 @@ export function MessageList() {
   )
 }
 
-function MessageItem({ message, index = 0 }: { message: Message; index?: number }) {
+function MessageItem({ message }: { message: Message }) {
   const [editing, setEditing] = useState(false)
   const [content, setContent] = useState(message.content)
   const [showMenu, setShowMenu] = useState(false)
@@ -251,7 +326,6 @@ function MessageItem({ message, index = 0 }: { message: Message; index?: number 
   return (
     <div
       className="group py-2 px-2 rounded-lg hover:bg-[var(--color-bg-hover)] transition-colors message-appear relative"
-      style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
     >
       <div className="flex gap-3">
         {/* Avatar */}
@@ -300,23 +374,25 @@ function MessageItem({ message, index = 0 }: { message: Message; index?: number 
             </>
           )}
 
-          {/* Reactions */}
-          {(reactions.length > 0 || true) && (
+          {/* Reactions - only show if there are actual reactions */}
+          {reactions.length > 0 && (
             <div className="mt-2 relative">
               <ReactionDisplay
                 reactions={reactions}
                 onToggle={handleToggleReaction}
                 onOpenPicker={() => setShowReactionPicker(true)}
               />
+            </div>
+          )}
 
-              {showReactionPicker && (
-                <ReactionPicker
-                  reactions={reactions}
-                  onAddReaction={handleAddReaction}
-                  onRemoveReaction={handleRemoveReaction}
-                  onClose={() => setShowReactionPicker(false)}
-                />
-              )}
+          {showReactionPicker && (
+            <div className="relative">
+              <ReactionPicker
+                reactions={reactions}
+                onAddReaction={handleAddReaction}
+                onRemoveReaction={handleRemoveReaction}
+                onClose={() => setShowReactionPicker(false)}
+              />
             </div>
           )}
         </div>

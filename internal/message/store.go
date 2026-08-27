@@ -19,6 +19,9 @@ const (
 // ErrMessageNotFound indicates message doesn't exist
 var ErrMessageNotFound = errors.New("message not found")
 
+// ErrNotAuthorized indicates user is not allowed to perform action
+var ErrNotAuthorized = errors.New("not authorized")
+
 // Store handles message database operations
 type Store struct {
 	db *database.DB
@@ -31,13 +34,14 @@ func NewStore(db *database.DB) *Store {
 
 // Message represents a message in the database
 type Message struct {
-	ID        string
-	ChannelID string
-	AuthorID  string
-	Content   string
-	CreatedAt time.Time
-	EditedAt  *time.Time
-	DeletedAt *time.Time
+	ID         string
+	ChannelID  string
+	AuthorID   string
+	AuthorName string
+	Content    string
+	CreatedAt  time.Time
+	EditedAt   *time.Time
+	DeletedAt  *time.Time
 }
 
 // CreateMessage creates a new message
@@ -112,21 +116,22 @@ func (s *Store) ListMessagesByChannel(channelID string, beforeID string, limit i
 	var args []interface{}
 
 	if beforeID != "" {
-		// Get message ID's created_at to use as cursor
 		query = `
-			SELECT id, channel_id, author_id, content, created_at, edited_at, deleted_at
-			FROM messages
-			WHERE channel_id = ? AND id < ?
-			ORDER BY created_at DESC
+			SELECT m.id, m.channel_id, m.author_id, COALESCE(u.username, 'User'), m.content, m.created_at, m.edited_at, m.deleted_at
+			FROM messages m
+			LEFT JOIN users u ON m.author_id = u.id
+			WHERE m.channel_id = ? AND m.id < ?
+			ORDER BY m.created_at DESC
 			LIMIT ?
 		`
 		args = []interface{}{channelID, beforeID, limit}
 	} else {
 		query = `
-			SELECT id, channel_id, author_id, content, created_at, edited_at, deleted_at
-			FROM messages
-			WHERE channel_id = ?
-			ORDER BY created_at DESC
+			SELECT m.id, m.channel_id, m.author_id, COALESCE(u.username, 'User'), m.content, m.created_at, m.edited_at, m.deleted_at
+			FROM messages m
+			LEFT JOIN users u ON m.author_id = u.id
+			WHERE m.channel_id = ?
+			ORDER BY m.created_at DESC
 			LIMIT ?
 		`
 		args = []interface{}{channelID, limit}
@@ -146,6 +151,7 @@ func (s *Store) ListMessagesByChannel(channelID string, beforeID string, limit i
 			&msg.ID,
 			&msg.ChannelID,
 			&msg.AuthorID,
+			&msg.AuthorName,
 			&msg.Content,
 			&msg.CreatedAt,
 			&editedAt,

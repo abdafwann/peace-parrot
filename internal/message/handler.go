@@ -1,6 +1,7 @@
 package message
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -25,13 +26,14 @@ type MessageRequest struct {
 
 // MessageResponse represents message in API response
 type MessageResponse struct {
-	ID        string  `json:"id"`
-	ChannelID string  `json:"channel_id"`
-	AuthorID  string  `json:"author_id"`
-	Content   string  `json:"content"`
-	CreatedAt string  `json:"created_at"`
-	EditedAt  *string `json:"edited_at,omitempty"`
-	DeletedAt *string `json:"deleted_at,omitempty"`
+	ID         string  `json:"id"`
+	ChannelID  string  `json:"channel_id"`
+	AuthorID   string  `json:"author_id"`
+	AuthorName string  `json:"author_name,omitempty"`
+	Content    string  `json:"content"`
+	CreatedAt  string  `json:"created_at"`
+	EditedAt   *string `json:"edited_at,omitempty"`
+	DeletedAt  *string `json:"deleted_at,omitempty"`
 }
 
 // List handles GET /api/channels/:id/messages
@@ -55,11 +57,12 @@ func (h *Handler) List(c echo.Context) error {
 	response := make([]MessageResponse, len(messages))
 	for i, msg := range messages {
 		response[i] = MessageResponse{
-			ID:        msg.ID,
-			ChannelID: msg.ChannelID,
-			AuthorID:  msg.AuthorID,
-			Content:   msg.Content,
-			CreatedAt: msg.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			ID:         msg.ID,
+			ChannelID:  msg.ChannelID,
+			AuthorID:   msg.AuthorID,
+			AuthorName: msg.AuthorName,
+			Content:    msg.Content,
+			CreatedAt:  msg.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		}
 		if msg.EditedAt != nil {
 			edited := msg.EditedAt.Format("2006-01-02T15:04:05Z")
@@ -215,4 +218,80 @@ func trimAndValidate(content string) string {
 		trimmed = trimmed[:len(trimmed)-1]
 	}
 	return trimmed
+}
+
+// CreateMessage creates a message (used by WebSocket handler)
+func (h *Handler) CreateMessage(channelID, authorID, content string) (*Message, error) {
+	// Validate
+	content = trimAndValidate(content)
+	if content == "" {
+		return nil, fmt.Errorf("message content is required")
+	}
+	if len(content) > MaxMessageLength {
+		return nil, fmt.Errorf("message exceeds maximum length of %d characters", MaxMessageLength)
+	}
+
+	msg := &Message{
+		ChannelID: channelID,
+		AuthorID:  authorID,
+		Content:   content,
+	}
+
+	if err := h.store.CreateMessage(msg); err != nil {
+		return nil, err
+	}
+
+	return msg, nil
+}
+
+// EditMessage edits a message (used by WebSocket handler)
+// Returns nil, nil if message not found or not authorized (for silent ignore)
+func (h *Handler) EditMessage(messageID, authorID, content string) (*Message, error) {
+	content = trimAndValidate(content)
+	if content == "" {
+		return nil, fmt.Errorf("message content is required")
+	}
+	if len(content) > MaxMessageLength {
+		return nil, fmt.Errorf("message exceeds maximum length of %d characters", MaxMessageLength)
+	}
+
+	// Check ownership
+	existing, err := h.store.GetMessageByID(messageID)
+	if err != nil {
+		if err == ErrMessageNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if existing.AuthorID != authorID {
+		return nil, ErrNotAuthorized
+	}
+
+	if err := h.store.UpdateMessage(messageID, content); err != nil {
+		return nil, err
+	}
+
+	return h.store.GetMessageByID(messageID)
+}
+
+// DeleteMessage deletes a message (used by WebSocket handler)
+// Returns nil, nil if message not found or not authorized (for silent ignore)
+func (h *Handler) DeleteMessage(messageID, authorID string) (*Message, error) {
+	// Check ownership
+	existing, err := h.store.GetMessageByID(messageID)
+	if err != nil {
+		if err == ErrMessageNotFound {
+			return nil, nil
+		}
+		return nil, nil
+	}
+	if existing.AuthorID != authorID {
+		return nil, ErrNotAuthorized
+	}
+
+	if err := h.store.DeleteMessage(messageID); err != nil {
+		return nil, err
+	}
+
+	return existing, nil
 }

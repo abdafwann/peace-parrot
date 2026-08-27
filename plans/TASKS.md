@@ -56,9 +56,9 @@
 - [x] POST /api/messages/:id/reactions ✅
 - [x] DELETE /api/messages/:id/reactions/:emoji ✅
 - [x] GET/POST/DELETE /api/channels/:id/pins ✅
-- [ ] WebSocket: subscribe/unsubscribe
-- [ ] WebSocket: typing indicators
-- [ ] WebSocket: message events
+- [x] WebSocket: subscribe/unsubscribe ✅
+- [x] WebSocket: typing indicators ✅
+- [x] WebSocket: message events ✅
 - [ ] Link preview fetching
 
 ---
@@ -69,7 +69,7 @@
 - [x] Voice event handlers (join/leave/state_update) ✅
 - [x] Voice moderation REST endpoints ✅
 - [x] Voice unit tests ✅
-- [ ] WebSocket integration
+- [x] WebSocket integration ✅
 - [ ] SFU integration (pion/sfu)
 - [ ] WebRTC signaling
 - [ ] Reconnection flow
@@ -96,7 +96,7 @@
 - [x] Layout shell (server/channel/member sidebars) ✅
 - [x] Zustand stores ✅
 - [x] Theme toggle ✅
-- [ ] WebSocket manager (disabled until backend ready)
+- [x] WebSocket manager (in progress) 🔄
 
 ---
 
@@ -122,11 +122,11 @@
 
 ## Milestone: Frontend Voice
 
-- [ ] Voice panel UI
-- [ ] Voice state icons
-- [ ] Speaking indicator
-- [ ] Screen share UI
-- [ ] Voice controls
+- [x] Voice panel UI (BottomSidebar voice connection widget) ✅
+- [x] Voice state icons (Radio pulse, ping, active status) ✅
+- [x] Speaking indicator (Speaking ring & green dot) ✅
+- [x] Screen share UI (Quick action buttons & screen share state) ✅
+- [x] Voice controls (Mute, deafen, disconnect, direct click join) ✅
 
 ---
 

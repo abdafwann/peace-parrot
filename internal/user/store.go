@@ -153,3 +153,47 @@ func (s *Store) UpdateUser(user *User) error {
 
 	return nil
 }
+
+// ListUsers retrieves all users
+func (s *Store) ListUsers() ([]*User, error) {
+	query := `
+		SELECT id, username, avatar_url, display_name, bio, created_at, updated_at
+		FROM users
+		ORDER BY username ASC
+	`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var users []*User
+	for rows.Next() {
+		u := &User{}
+		var avatarURL, displayName, bio sql.NullString
+		if err := rows.Scan(
+			&u.ID,
+			&u.Username,
+			&avatarURL,
+			&displayName,
+			&bio,
+			&u.CreatedAt,
+			&u.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if avatarURL.Valid {
+			u.AvatarURL = avatarURL.String
+		}
+		if displayName.Valid {
+			u.DisplayName = displayName.String
+		}
+		if bio.Valid {
+			u.Bio = bio.String
+		}
+		users = append(users, u)
+	}
+
+	return users, rows.Err()
+}

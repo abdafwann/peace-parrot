@@ -12,6 +12,7 @@ import (
 type Client struct {
 	ID       string
 	UserID   string
+	Username string
 	Conn     *websocket.Conn
 	Channels map[string]bool // subscribed channels
 	mu       sync.RWMutex
@@ -79,6 +80,7 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 
 		case message := <-h.broadcast:
+			log.Printf("[Hub] Received broadcast message type=%s channel=%s", message.Type, message.ChannelID)
 			h.mu.RLock()
 			for _, client := range h.clients {
 				client.mu.RLock()
@@ -111,6 +113,17 @@ func (h *Hub) BroadcastChannel(channelID, eventType string, payload interface{})
 		ChannelID: channelID,
 		Payload:   mustMarshal(payload),
 	}
+	log.Printf("[Hub] Broadcasting %s to channel %s, subscribed clients:", eventType, channelID)
+	h.mu.RLock()
+	for clientID, client := range h.clients {
+		client.mu.RLock()
+		subscribed := client.Channels[channelID]
+		if subscribed {
+			log.Printf("[Hub]   -> client %s (user: %s) SUBSCRIBED", clientID, client.UserID)
+		}
+		client.mu.RUnlock()
+	}
+	h.mu.RUnlock()
 	h.broadcast <- &msg
 }
 
@@ -183,7 +196,9 @@ func (h *Hub) BroadcastToChannel(channelID, eventType string, payload interface{
 		ChannelID: channelID,
 		Payload:   mustMarshal(payload),
 	}
+	log.Printf("[Hub] Queuing broadcast %s to channel %s", eventType, channelID)
 	h.broadcast <- &msg
+	log.Printf("[Hub] Queued broadcast for channel %s", channelID)
 }
 
 // mustMarshal marshals or panics

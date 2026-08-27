@@ -11,6 +11,7 @@ export function MessageComposer() {
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isTypingRef = useRef(false)
 
+  const send = useWebSocketStore((s) => s.send)
   const startTyping = useWebSocketStore((s) => s.startTyping)
   const stopTyping = useWebSocketStore((s) => s.stopTyping)
 
@@ -52,22 +53,23 @@ export function MessageComposer() {
 
     setSending(true)
     const messageToSend = message.trim()
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2)}`
     setMessage('')
 
-    try {
-      const res = await fetch(`http://localhost:8080/api/channels/${activeChannelId}/messages`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: messageToSend }),
-      })
-      if (!res.ok) console.error('Failed to send message')
-    } catch (err) {
-      console.error('Network error:', err)
-      setMessage(messageToSend) // Restore message on error
-    } finally {
-      setSending(false)
-      inputRef.current?.focus()
-    }
+    // Send via WebSocket per spec
+    send({
+      type: 'message',
+      channelId: activeChannelId,
+      payload: {
+        channelId: activeChannelId,
+        id: tempId,
+        content: messageToSend,
+      },
+    })
+
+    // Clear sending state (real message will come back via WebSocket)
+    setSending(false)
+    inputRef.current?.focus()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -100,7 +102,7 @@ export function MessageComposer() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="p-4">
+    <form onSubmit={handleSubmit} className="px-4 pb-4 pt-1">
       <div
         className="rounded-xl flex items-end gap-2 p-2 transition-all duration-200"
         style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-default)' }}

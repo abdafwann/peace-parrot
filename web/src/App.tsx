@@ -4,9 +4,11 @@ import { LoginForm, RegisterForm } from './components/AuthForms'
 import { MessageList } from './components/MessageList'
 import { MessageComposer } from './components/MessageComposer'
 import { TypingIndicator } from './components/TypingIndicator'
+import { VoicePanel } from './components/VoicePanel'
 import { useAuthStore } from './stores/authStore'
 import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
+import { useWebSocketStore, setTokenGetter } from './stores/websocketStore'
 import { useState, useEffect } from 'react'
 import { Sun, Moon, Bird } from 'lucide-react'
 
@@ -97,16 +99,24 @@ function ChatPage() {
     return state.channels.find(c => c.id === id)
   })
   const { theme } = useThemeStore()
-  // WebSocket will be enabled once backend supports it
-  // const connect = useWebSocketStore((state) => state.connect)
-  // const isConnected = useWebSocketStore((state) => state.isConnected)
 
-  // Connect WebSocket when authenticated (disabled until backend supports WS)
-  // useEffect(() => {
-  //   if (token && !isConnected) {
-  //     connect(token)
-  //   }
-  // }, [token, isConnected, connect])
+  // WebSocket connection
+  const token = useAuthStore((state) => state.token)
+  const connect = useWebSocketStore((state) => state.connect)
+  const isConnected = useWebSocketStore((state) => state.isConnected)
+
+  // Set up token getter for WebSocket store
+  useEffect(() => {
+    setTokenGetter(() => useAuthStore.getState().token)
+  }, [])
+
+  // Connect WebSocket when authenticated
+  useEffect(() => {
+    if (token && !isConnected) {
+      console.log('[App] Connecting WebSocket...')
+      connect(token)
+    }
+  }, [token, isConnected, connect])
 
   // Fetch channels on mount
   useEffect(() => {
@@ -158,7 +168,9 @@ function ChatPage() {
         className="h-12 px-4 flex items-center gap-3 shrink-0"
         style={{ borderBottom: '1px solid var(--color-border-default)' }}
       >
-        <span className="text-lg text-[var(--color-text-secondary)]">#</span>
+        <span className={`text-lg ${activeChannel?.type === 'voice' ? 'text-[var(--color-parrot-green)]' : 'text-[var(--color-text-secondary)]'}`}>
+          {activeChannel?.type === 'voice' ? '🔊' : '#'}
+        </span>
         <h2 className="font-semibold text-[var(--color-text-primary)]">
           {activeChannel?.name || 'general'}
         </h2>
@@ -191,12 +203,22 @@ function ChatPage() {
         </div>
       </div>
 
-      {/* Messages and composer */}
+      {/* Messages and composer - only show for text channels */}
       {activeChannelId ? (
         <>
-          <MessageList />
-          <TypingIndicator channelId={activeChannelId} />
-          <MessageComposer />
+          {activeChannel?.type === 'text' ? (
+            <>
+              <MessageList />
+              <TypingIndicator channelId={activeChannelId} />
+              <MessageComposer />
+            </>
+          ) : activeChannel?.type === 'voice' ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-[var(--color-text-muted)]">
+              <Bird size={64} className="mb-4 animate-float opacity-30" />
+              <p className="text-xl mb-2">Voice Channel</p>
+              <p className="text-sm">Select a text channel to chat</p>
+            </div>
+          ) : null}
         </>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-[var(--color-text-muted)]">
@@ -205,6 +227,9 @@ function ChatPage() {
           <p className="text-sm">Select a channel from the sidebar to start chatting</p>
         </div>
       )}
+
+      {/* Voice Panel - collapsible, shown when in voice */}
+      <VoicePanel />
     </>
   )
 }
