@@ -65,10 +65,11 @@
 
 ## Milestone: Voice
 
-- [ ] VoiceSession manager (in-memory)
-- [ ] WebSocket: voice_join/leave
-- [ ] WebSocket: voice_state_update
-- [ ] WebSocket: speaking indicator
+- [x] VoiceSession manager (in-memory) ✅
+- [x] Voice event handlers (join/leave/state_update) ✅
+- [x] Voice moderation REST endpoints ✅
+- [x] Voice unit tests ✅
+- [ ] WebSocket integration
 - [ ] SFU integration (pion/sfu)
 - [ ] WebRTC signaling
 - [ ] Reconnection flow
