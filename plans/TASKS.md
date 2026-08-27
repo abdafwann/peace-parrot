@@ -78,10 +78,13 @@
 
 ## Milestone: Moderation
 
-- [ ] POST /api/moderation/kick/:userId
-- [ ] POST /api/moderation/ban/:userId
-- [ ] POST/DELETE /api/moderation/mute/:userId
-- [ ] POST/DELETE /api/voice/mute/:userId
+- [x] POST /api/moderation/kick/:userId ✅
+- [x] POST /api/moderation/ban/:userId ✅
+- [x] DELETE /api/moderation/ban/:userId ✅
+- [x] POST /api/moderation/mute/:userId ✅
+- [x] DELETE /api/moderation/mute/:userId ✅
+- [x] GET /api/moderation/status/:userId ✅
+- [x] Migration: mutes, bans, kicks tables ✅
 
 ---
 
