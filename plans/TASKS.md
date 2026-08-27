@@ -100,23 +100,35 @@
 
 ---
 
+## Milestone: Frontend Core
+
+- [x] Tauri setup ✅
+- [x] Tailwind + design system ✅
+- [x] Dark theme palette ✅
+- [x] Layout shell (server/channel/member sidebars) ✅
+- [x] Zustand stores ✅
+- [x] Theme toggle ✅
+- [ ] WebSocket manager (disabled until backend ready)
+
+---
+
 ## Milestone: Frontend Auth
 
-- [ ] Login page
-- [ ] Register page
-- [ ] Auth state management
-- [ ] Avatar upload UI
+- [x] Login page ✅
+- [x] Register page ✅
+- [x] Auth state management ✅
+- [ ] Avatar upload UI (deferred)
 
 ---
 
 ## Milestone: Frontend Chat
 
-- [ ] Channel list UI
-- [ ] Message list UI
-- [ ] Message composer
-- [ ] Typing indicators UI
-- [ ] Reactions UI
-- [ ] Link preview rendering
+- [x] Channel list UI ✅
+- [x] Message list UI ✅
+- [x] Message composer ✅
+- [x] Typing indicators UI ✅
+- [x] Reactions UI ✅
+- [x] Link preview rendering ✅
 
 ---
 
