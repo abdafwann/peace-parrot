@@ -9,6 +9,7 @@ import { useAuthStore } from './stores/authStore'
 import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocketStore, setTokenGetter } from './stores/websocketStore'
+import { useSFU } from './hooks/useSFU'
 import { useState, useEffect } from 'react'
 import { Sun, Moon, Bird } from 'lucide-react'
 
@@ -92,6 +93,9 @@ function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) 
 }
 
 function ChatPage() {
+  // Mount active WebRTC SFU Voice Client
+  useSFU()
+
   const setChannels = useChannelStore((state) => state.setChannels)
   const activeChannelId = useChannelStore((state) => state.activeChannelId)
   const activeChannel = useChannelStore((state) => {

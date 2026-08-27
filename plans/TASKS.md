@@ -70,9 +70,9 @@
 - [x] Voice moderation REST endpoints ✅
 - [x] Voice unit tests ✅
 - [x] WebSocket integration ✅
-- [ ] SFU integration (pion/sfu)
-- [ ] WebRTC signaling
-- [ ] Reconnection flow
+- [x] SFU integration (pion/webrtc SFU engine) ✅
+- [x] WebRTC signaling (Offer/Answer/ICE negotiation) ✅
+- [x] Reconnection flow & speaking detection ✅
 
 ---
 

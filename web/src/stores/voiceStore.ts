@@ -10,6 +10,9 @@ export interface VoiceParticipantState {
   deafened: boolean        // Self-deafened
   isScreenSharing: boolean // User is sharing their screen
   joinedAt: number          // Timestamp
+  channelId?: string
+  username?: string
+  displayName?: string
 
   // Client-side local (never sent to server)
   localMuted: boolean      // YOU muted this user locally
@@ -66,6 +69,9 @@ interface VoiceActions {
 
   // Speaking detection
   setParticipantSpeaking: (userId: string, isSpeaking: boolean) => void
+
+  // Leave channel (cleans up local state, keeps other participants)
+  leaveLocalChannel: (localUserId?: string) => void
 
   // Full reset (cleanup)
   reset: () => void
@@ -190,6 +196,23 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
         newParticipants.set(userId, { ...existing, isSpeaking })
       }
       return { participants: newParticipants }
+    })
+  },
+
+  leaveLocalChannel: (localUserId?: string) => {
+    set((state) => {
+      const newParticipants = new Map(state.participants)
+      if (localUserId) {
+        newParticipants.delete(localUserId)
+      }
+      newParticipants.delete('local')
+      return {
+        channelId: null,
+        isConnected: false,
+        isConnecting: false,
+        isScreenSharing: false,
+        participants: newParticipants,
+      }
     })
   },
 

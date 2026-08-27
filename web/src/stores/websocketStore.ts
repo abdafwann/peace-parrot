@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
 import { useMessageStore } from './messageStore'
+import { useVoiceStore } from './voiceStore'
 
 export type WSEventType =
   | 'channel_join'
@@ -22,6 +23,9 @@ export type WSEventType =
   | 'user_left_voice'
   | 'user_muted'
   | 'speaking'
+  | 'webrtc_offer'
+  | 'webrtc_answer'
+  | 'webrtc_ice'
 
 export interface WSMessage {
   type: WSEventType
@@ -345,6 +349,103 @@ function handleMessage(message: WSMessage) {
           [channelId]: current.filter((u) => u.userId !== userId),
         },
       })
+    }
+  }
+
+  // Handle Voice room state and participant updates
+  if (message.type === 'voice_room_state') {
+    const payload = (message.payload || {}) as {
+      channelId?: string
+      participants?: Array<{
+        user_id?: string
+        userId?: string
+        username?: string
+        display_name?: string
+        displayName?: string
+        self_muted?: boolean
+        selfMuted?: boolean
+        muted?: boolean
+        deafened?: boolean
+        is_screen_sharing?: boolean
+        isScreenSharing?: boolean
+        joined_at?: string
+      }>
+    }
+    const channelId = (payload.channelId || message.channelId) as string
+    const participants = payload.participants || []
+    const voiceStore = useVoiceStore.getState()
+    const newMap = new Map(voiceStore.participants)
+
+    participants.forEach((p) => {
+      const uid = p.user_id || p.userId
+      if (uid) {
+        newMap.set(uid, {
+          channelId,
+          muted: Boolean(p.self_muted ?? p.selfMuted ?? p.muted),
+          deafened: Boolean(p.deafened),
+          isScreenSharing: Boolean(p.is_screen_sharing ?? p.isScreenSharing),
+          joinedAt: p.joined_at ? new Date(p.joined_at).getTime() : Date.now(),
+          localMuted: false,
+          volume: 1.0,
+          isSpeaking: false,
+          username: p.username,
+          displayName: p.display_name || p.displayName,
+        })
+      }
+    })
+    voiceStore.setParticipants(newMap)
+  }
+
+  if (message.type === 'user_joined_voice') {
+    const payload = (message.payload || {}) as {
+      channelId?: string
+      user?: Record<string, any>
+    }
+    const user = (payload.user || payload) as Record<string, any>
+    const uid = user.user_id || user.userId
+    const channelId = (payload.channelId || message.channelId || user.channelId) as string
+    if (uid) {
+      useVoiceStore.getState().addParticipant(uid, {
+        channelId,
+        muted: Boolean(user.self_muted ?? user.selfMuted ?? user.muted),
+        deafened: Boolean(user.deafened),
+        isScreenSharing: Boolean(user.is_screen_sharing ?? user.isScreenSharing),
+        joinedAt: user.joined_at ? new Date(user.joined_at).getTime() : Date.now(),
+        localMuted: false,
+        volume: 1.0,
+        isSpeaking: false,
+        username: user.username,
+        displayName: user.display_name || user.displayName,
+      })
+    }
+  }
+
+  if (message.type === 'user_left_voice') {
+    const payload = (message.payload || {}) as { channelId?: string; userId?: string }
+    const uid = payload.userId
+    if (uid) {
+      useVoiceStore.getState().removeParticipant(uid)
+    }
+  }
+
+  if (message.type === 'voice_state_update') {
+    const payload = (message.payload || {}) as {
+      userId?: string
+      selfMuted?: boolean
+      selfDeafened?: boolean
+    }
+    if (payload.userId) {
+      useVoiceStore.getState().updateParticipant(payload.userId, {
+        muted: Boolean(payload.selfMuted),
+        deafened: Boolean(payload.selfDeafened),
+      })
+    }
+  }
+
+  if (message.type === 'speaking') {
+    const payload = (message.payload || {}) as { userId?: string; speaking?: boolean }
+    if (payload.userId) {
+      useVoiceStore.getState().setParticipantSpeaking(payload.userId, Boolean(payload.speaking))
     }
   }
 }

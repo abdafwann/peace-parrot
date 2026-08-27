@@ -162,11 +162,24 @@ export function useSpeakingDetection(
 // useVoiceCleanup - Handles cleanup on leave (spec Section 3.4)
 // ============================================================================
 
+import { useWebSocketStore } from '../stores/websocketStore'
+import { useAuthStore } from '../stores/authStore'
+
 export function useVoiceCleanup() {
   const voiceRef = useVoiceRef()
-  const reset = useVoiceStore((state) => state.reset)
+  const leaveLocalChannel = useVoiceStore((state) => state.leaveLocalChannel)
+  const user = useAuthStore((state) => state.user)
 
   const leaveChannel = useCallback(() => {
+    const activeChanId = useVoiceStore.getState().channelId
+    if (activeChanId) {
+      useWebSocketStore.getState().send({
+        type: 'voice_leave',
+        channelId: activeChanId,
+        payload: { channelId: activeChanId },
+      })
+    }
+
     // 1. Stop all tracks
     voiceRef.stopAllTracks()
 
@@ -179,9 +192,9 @@ export function useVoiceCleanup() {
     // 4. Clear refs
     voiceRef.clearRefs()
 
-    // 5. Wipe Zustand state
-    reset()
-  }, [voiceRef, reset])
+    // 5. Update local state without wiping remote participants
+    leaveLocalChannel(user?.id)
+  }, [voiceRef, leaveLocalChannel, user])
 
   return {
     ...voiceRef,

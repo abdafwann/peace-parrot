@@ -20,6 +20,7 @@ import {
 import { useVoiceStore } from '../stores/voiceStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useAuthStore } from '../stores/authStore'
+import { useWebSocketStore } from '../stores/websocketStore'
 import { useVoiceCleanup } from '../hooks/useVoice'
 
 export function BottomSidebar() {
@@ -39,6 +40,40 @@ export function BottomSidebar() {
   const user = useAuthStore((state) => state.user)
   const channels = useChannelStore((state) => state.channels)
   const voiceChannel = channels.find((c) => c.id === voiceChannelId)
+
+  const handleToggleMute = () => {
+    const nextMuted = !selfMuted
+    setSelfMuted(nextMuted)
+
+    if (voiceChannelId) {
+      useWebSocketStore.getState().send({
+        type: 'voice_state_update',
+        channelId: voiceChannelId,
+        payload: {
+          channelId: voiceChannelId,
+          selfMuted: nextMuted,
+          selfDeafened,
+        },
+      })
+    }
+  }
+
+  const handleToggleDeafen = () => {
+    const nextDeafened = !selfDeafened
+    setSelfDeafened(nextDeafened)
+
+    if (voiceChannelId) {
+      useWebSocketStore.getState().send({
+        type: 'voice_state_update',
+        channelId: voiceChannelId,
+        payload: {
+          channelId: voiceChannelId,
+          selfMuted,
+          selfDeafened: nextDeafened,
+        },
+      })
+    }
+  }
 
   return (
     <div
@@ -118,7 +153,7 @@ export function BottomSidebar() {
               onClick={() => setIsScreenSharing(!isScreenSharing)}
               className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 ${
                 isScreenSharing
-                  ? 'bg-[var(--color-brand)] text-white shadow-sm'
+                  ? 'bg-[#23a559] text-white shadow-sm'
                   : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white'
               }`}
               title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Your Screen'}
@@ -129,7 +164,7 @@ export function BottomSidebar() {
             {/* 3. Activities / Apps button */}
             <button
               className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95"
-              title="Start an Activity"
+              title="Start Activity"
             >
               <Gamepad2 size={17} />
             </button>
@@ -192,7 +227,7 @@ export function BottomSidebar() {
           {/* Mute toggle button with dropdown arrow */}
           <div className="flex items-center">
             <button
-              onClick={() => setSelfMuted(!selfMuted)}
+              onClick={handleToggleMute}
               className={`p-1.5 rounded-md transition-colors ${
                 selfMuted
                   ? 'text-[#ed4245] hover:bg-[#ed4245]/15'
@@ -208,7 +243,7 @@ export function BottomSidebar() {
           {/* Deafen toggle button with dropdown arrow */}
           <div className="flex items-center">
             <button
-              onClick={() => setSelfDeafened(!selfDeafened)}
+              onClick={handleToggleDeafen}
               className={`p-1.5 rounded-md transition-colors ${
                 selfDeafened
                   ? 'text-[#ed4245] hover:bg-[#ed4245]/15'

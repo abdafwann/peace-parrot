@@ -15,16 +15,24 @@ type Client struct {
 	Username string
 	Conn     *websocket.Conn
 	Channels map[string]bool // subscribed channels
+	writeMu  sync.Mutex
 	mu       sync.RWMutex
+}
+
+// SendJSON writes JSON to the client safely with mutex lock
+func (c *Client) SendJSON(v interface{}) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.Conn.WriteJSON(v)
 }
 
 // Hub manages all WebSocket connections
 type Hub struct {
-	clients   map[string]*Client
-	register  chan *Client
+	clients    map[string]*Client
+	register   chan *Client
 	unregister chan *Client
-	broadcast chan *Message
-	mu        sync.RWMutex
+	broadcast  chan *Message
+	mu         sync.RWMutex
 
 	// Event handlers
 	voiceHandler VoiceHandler
@@ -32,7 +40,7 @@ type Hub struct {
 
 // VoiceHandler interface for voice events
 type VoiceHandler interface {
-	HandleVoiceJoin(userID string, payload []byte) (interface{}, error)
+	HandleVoiceJoin(userID, username string, payload []byte) (interface{}, error)
 	HandleVoiceLeave(userID string, payload []byte) error
 	HandleVoiceStateUpdate(userID string, payload []byte) error
 	HandleSpeaking(userID string, payload []byte) error
@@ -85,7 +93,7 @@ func (h *Hub) Run() {
 			for _, client := range h.clients {
 				client.mu.RLock()
 				if message.ChannelID == "" || client.Channels[message.ChannelID] {
-					if err := client.Conn.WriteJSON(message); err != nil {
+					if err := client.SendJSON(message); err != nil {
 						log.Printf("WebSocket: Error sending to client %s: %v", client.ID, err)
 					}
 				}
@@ -111,19 +119,9 @@ func (h *Hub) BroadcastChannel(channelID, eventType string, payload interface{})
 	msg := Message{
 		Type:      eventType,
 		ChannelID: channelID,
-		Payload:   mustMarshal(payload),
+		Payload:   MustMarshal(payload),
 	}
-	log.Printf("[Hub] Broadcasting %s to channel %s, subscribed clients:", eventType, channelID)
-	h.mu.RLock()
-	for clientID, client := range h.clients {
-		client.mu.RLock()
-		subscribed := client.Channels[channelID]
-		if subscribed {
-			log.Printf("[Hub]   -> client %s (user: %s) SUBSCRIBED", clientID, client.UserID)
-		}
-		client.mu.RUnlock()
-	}
-	h.mu.RUnlock()
+	log.Printf("[Hub] Broadcasting %s to channel %s", eventType, channelID)
 	h.broadcast <- &msg
 }
 
@@ -131,7 +129,7 @@ func (h *Hub) BroadcastChannel(channelID, eventType string, payload interface{})
 func (h *Hub) SendToUser(userID, eventType string, payload interface{}) {
 	msg := Message{
 		Type:    eventType,
-		Payload: mustMarshal(payload),
+		Payload: MustMarshal(payload),
 	}
 
 	h.mu.RLock()
@@ -139,7 +137,7 @@ func (h *Hub) SendToUser(userID, eventType string, payload interface{}) {
 
 	for _, client := range h.clients {
 		if client.UserID == userID {
-			if err := client.Conn.WriteJSON(msg); err != nil {
+			if err := client.SendJSON(msg); err != nil {
 				log.Printf("WebSocket: Error sending to user %s: %v", userID, err)
 			}
 		}
@@ -194,15 +192,25 @@ func (h *Hub) BroadcastToChannel(channelID, eventType string, payload interface{
 	msg := Message{
 		Type:      eventType,
 		ChannelID: channelID,
-		Payload:   mustMarshal(payload),
+		Payload:   MustMarshal(payload),
 	}
 	log.Printf("[Hub] Queuing broadcast %s to channel %s", eventType, channelID)
 	h.broadcast <- &msg
 	log.Printf("[Hub] Queued broadcast for channel %s", channelID)
 }
 
-// mustMarshal marshals or panics
-func mustMarshal(v interface{}) json.RawMessage {
+// BroadcastAll broadcasts an event to all connected clients
+func (h *Hub) BroadcastAll(eventType string, payload interface{}) {
+	msg := Message{
+		Type:    eventType,
+		Payload: MustMarshal(payload),
+	}
+	log.Printf("[Hub] Queuing global broadcast %s", eventType)
+	h.broadcast <- &msg
+}
+
+// MustMarshal marshals or returns nil on error
+func MustMarshal(v interface{}) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {
 		log.Printf("WebSocket: Error marshaling message: %v", err)

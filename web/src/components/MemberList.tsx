@@ -68,6 +68,7 @@ const DEFAULT_MEMBERS: Member[] = [
 export function MemberList() {
   const currentUser = useAuthStore((state) => state.user)
   const isInVoice = useVoiceStore((state) => state.channelId !== null)
+  const participants = useVoiceStore((state) => state.participants)
   const [members, setMembers] = useState<Member[]>(DEFAULT_MEMBERS)
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
@@ -188,6 +189,7 @@ export function MemberList() {
             currentUserId={currentUser?.id}
             currentUsername={currentUser?.username}
             isInVoice={isInVoice}
+            participants={participants}
             roleColor="#f0b232"
           />
         )}
@@ -202,6 +204,7 @@ export function MemberList() {
             currentUserId={currentUser?.id}
             currentUsername={currentUser?.username}
             isInVoice={isInVoice}
+            participants={participants}
             roleColor="#23a559"
           />
         )}
@@ -215,6 +218,7 @@ export function MemberList() {
             currentUserId={currentUser?.id}
             currentUsername={currentUser?.username}
             isInVoice={isInVoice}
+            participants={participants}
           />
         )}
 
@@ -227,6 +231,7 @@ export function MemberList() {
             currentUserId={currentUser?.id}
             currentUsername={currentUser?.username}
             isInVoice={false}
+            participants={participants}
             isOffline
           />
         )}
@@ -243,6 +248,7 @@ interface MemberCategoryProps {
   currentUserId?: string
   currentUsername?: string
   isInVoice?: boolean
+  participants?: Map<string, any>
   roleColor?: string
   isOffline?: boolean
 }
@@ -255,6 +261,7 @@ function MemberCategory({
   currentUserId,
   currentUsername,
   isInVoice,
+  participants,
   roleColor,
   isOffline,
 }: MemberCategoryProps) {
@@ -275,7 +282,15 @@ function MemberCategory({
             (currentUserId && member.id === currentUserId) ||
             (currentUsername && member.username.toLowerCase() === currentUsername.toLowerCase())
           )
-          const inVoiceNow = Boolean(isCurrent && isInVoice)
+          const inVoiceNow = Boolean(
+            (isCurrent && isInVoice) ||
+            (participants &&
+              Array.from(participants.entries()).some(
+                ([uid, p]) =>
+                  uid === member.id ||
+                  (p.username && p.username.toLowerCase() === member.username.toLowerCase())
+              ))
+          )
 
           return (
             <MemberItem

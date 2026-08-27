@@ -2,6 +2,7 @@ import { Hash, Volume2, ChevronDown, Plus, MicOff, HeadphoneOff } from 'lucide-r
 import { useChannelStore, type Channel } from '../stores/channelStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useAuthStore } from '../stores/authStore'
+import { useWebSocketStore } from '../stores/websocketStore'
 
 export function ChannelList() {
   const channels = useChannelStore((state) => state.channels)
@@ -108,28 +109,32 @@ function VoiceChannelItem({ channel, isActive, onClick }: VoiceChannelItemProps)
   const participants = useVoiceStore((state) => state.participants)
   const selfMuted = useVoiceStore((state) => state.selfMuted)
   const selfDeafened = useVoiceStore((state) => state.selfDeafened)
-  const addParticipant = useVoiceStore((state) => state.addParticipant)
   const setChannelId = useVoiceStore((state) => state.setChannelId)
   const setIsConnected = useVoiceStore((state) => state.setIsConnected)
   const user = useAuthStore((state) => state.user)
 
   const isInThisChannel = isInVoice && currentChannelId === channel.id
-  const participantCount = participants.size
+  // Filter participants in this channel (or fallback if channelId matches)
+  const channelParticipants = Array.from(participants.entries()).filter(
+    ([_, p]) => !p.channelId || p.channelId === channel.id
+  )
+  const participantCount = channelParticipants.length
 
   const handleChannelClick = () => {
     if (!isInThisChannel) {
-      // Connect to voice channel directly on click
-      addParticipant('local', {
-        muted: selfMuted,
-        deafened: selfDeafened,
-        isScreenSharing: false,
-        joinedAt: Date.now(),
-        localMuted: false,
-        volume: 1.0,
-        isSpeaking: false,
-      })
       setChannelId(channel.id)
       setIsConnected(true)
+
+      // Send WebSocket voice_join event with current mute/deafen states
+      useWebSocketStore.getState().send({
+        type: 'voice_join',
+        channelId: channel.id,
+        payload: {
+          channelId: channel.id,
+          selfMuted,
+          selfDeafened,
+        },
+      })
     }
     onClick()
   }
@@ -159,25 +164,28 @@ function VoiceChannelItem({ channel, isActive, onClick }: VoiceChannelItemProps)
 
         <span className="truncate font-medium flex-1 text-left">{channel.name}</span>
 
-        {/* Participant count when in this channel */}
-        {isInThisChannel && participantCount > 0 && (
+        {/* Participant count when any users are in this channel */}
+        {participantCount > 0 && (
           <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/20 font-medium shrink-0">
             {participantCount}
           </span>
         )}
       </button>
 
-      {/* Expanded participants section - only show when in this channel */}
-      {isInThisChannel && (
+      {/* Expanded participants section - show whenever there are participants in this channel */}
+      {channelParticipants.length > 0 && (
         <div className="ml-4 mt-1 space-y-1">
-          {Array.from(participants.entries()).map(([userId, participant]) => {
-            const isSelf = userId === 'local'
+          {channelParticipants.map(([userId, participant]) => {
+            const isSelf =
+              userId === 'local' ||
+              (user?.id && userId === user.id) ||
+              (user?.username && participant.username?.toLowerCase() === user.username.toLowerCase())
             const isDeafened = isSelf ? selfDeafened : participant.deafened
             const isMuted = isSelf ? selfMuted : participant.muted
             const displayName = isSelf
-              ? user?.displayName || user?.username || 'You'
-              : `User ${userId.slice(0, 4)}`
-            const initial = displayName[0].toUpperCase()
+              ? `${user?.displayName || user?.username || 'You'} (You)`
+              : participant.displayName || participant.username || `User ${userId.slice(0, 4)}`
+            const initial = displayName[0]?.toUpperCase() || 'U'
 
             return (
               <div
@@ -212,7 +220,7 @@ function VoiceChannelItem({ channel, isActive, onClick }: VoiceChannelItemProps)
 
                 {/* Status indicators (Mute & Deafen shown separately or together) */}
                 <div className="flex items-center gap-1 shrink-0">
-                  {(isMuted || isDeafened) && (
+                  {isMuted && (
                     <span title="Muted" className="text-[#ed4245]">
                       <MicOff size={14} />
                     </span>
