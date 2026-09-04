@@ -14,6 +14,7 @@ import {
   Plus,
   UserX,
   MicOff,
+  Volume2,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useServerStore } from '../stores/serverStore'
@@ -55,7 +56,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   // Roles tab state
   const [selectedRoleId, setSelectedRoleId] = useState<string>('role-admin')
   const [editRoleName, setEditRoleName] = useState('Admin')
-  const [editRoleColor, setEditRoleColor] = useState('#5865F2')
+  const [editRoleColor, setEditRoleColor] = useState('#10B981')
   const [editRoleIcon, setEditRoleIcon] = useState('')
   const [editRolePerms, setEditRolePerms] = useState<number>(1023)
   const [isCreatingRole, setIsCreatingRole] = useState(false)
@@ -116,7 +117,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
     const cur = roles.find((r) => r.id === selectedRoleId)
     if (cur) {
       setEditRoleName(cur.name)
-      setEditRoleColor(cur.color || '#5865F2')
+      setEditRoleColor(cur.color || '#10B981')
       setEditRoleIcon(cur.iconUrl || '')
       setEditRolePerms(cur.permissions ?? 67)
     }
@@ -322,7 +323,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   // Role management actions
   const handleCreateRole = async () => {
     setIsCreatingRole(true)
-    const newRole = await createRole('new role', '#5865F2', '✨', 67)
+    const newRole = await createRole('new role', '#10B981', '✨', 67)
     setIsCreatingRole(false)
     if (newRole) {
       setSelectedRoleId(newRole.id)
@@ -378,684 +379,709 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   const ROLE_EMOJIS = ['👑', '🛡️', '⭐', '🔥', '💎', '🚀', '⚡', '🎮', '🎧', '🤖', '🦜', '✨', '🏆', '🎯']
 
   const COLOR_PALETTE = [
-    '#5865F2',
-    '#57F287',
-    '#FEE75C',
-    '#EB459E',
-    '#ED4245',
-    '#00AFF4',
-    '#E67E22',
-    '#9B59B6',
-    '#1ABC9C',
-    '#34495E',
+    '#10B981',
+    '#06B6D4',
+    '#3B82F6',
+    '#6366F1',
+    '#8B5CF6',
+    '#EC4899',
+    '#F43F5E',
+    '#F59E0B',
+    '#84CC16',
+    '#64748B',
   ]
 
   const selectedRole = roles.find((r) => r.id === selectedRoleId) || roles[0]
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex bg-black/80 backdrop-blur-md animate-fade-in">
-        {/* Left Settings Navigation Sidebar */}
-        <div
-          className="w-60 shrink-0 flex flex-col py-8 px-5"
-          style={{ background: 'var(--color-bg-secondary)', borderRight: '1px solid var(--color-border-default)' }}
-        >
-          <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mb-4 px-2">
-            {settings?.name || 'Server Settings'}
-          </div>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-2xl animate-fade-in">
+        <div className="w-full max-w-5xl h-[88vh] flex flex-col md:flex-row rounded-3xl overflow-hidden bg-[#0c1017]/95 border border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.85)] relative">
+          
+          {/* Ambient Top Glow */}
+          <div className="absolute top-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent pointer-events-none" />
 
-          <div className="space-y-1">
-            <button
-              onClick={() => setActiveTab('overview')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                activeTab === 'overview'
-                  ? 'bg-[var(--color-brand)] text-white shadow-md'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              <Settings size={18} />
-              <span>Overview</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('channels')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                activeTab === 'channels'
-                  ? 'bg-[var(--color-brand)] text-white shadow-md'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              <Hash size={18} />
-              <span>Channels</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('roles')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                activeTab === 'roles'
-                  ? 'bg-[var(--color-brand)] text-white shadow-md'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              <Shield size={18} />
-              <span>Roles & Permissions</span>
-            </button>
-          </div>
-
-          <div className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-muted)] mt-8 mb-4 px-2">
-            User Management
-          </div>
-
-          <div className="space-y-1">
-            <button
-              onClick={() => setActiveTab('members')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                activeTab === 'members'
-                  ? 'bg-[var(--color-brand)] text-white shadow-md'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              <Users size={18} />
-              <span>Members</span>
-            </button>
-
-            <button
-              onClick={() => setActiveTab('bans')}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all cursor-pointer ${
-                activeTab === 'bans'
-                  ? 'bg-[var(--color-brand)] text-white shadow-md'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
-              }`}
-            >
-              <Ban size={18} />
-              <span>Bans ({bans.length})</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Right Content Panel */}
-        <div className="flex-1 flex flex-col h-full overflow-hidden" style={{ background: 'var(--color-bg-primary)' }}>
-          {/* Top Bar with ESC close button */}
-          <div className="h-16 px-8 flex items-center justify-between shrink-0 border-b border-[var(--color-border-default)]">
-            <h1 className="text-xl font-bold text-[var(--color-text-primary)] capitalize">
-              {activeTab === 'overview' && 'Server Overview'}
-              {activeTab === 'channels' && 'Channel Management'}
-              {activeTab === 'roles' && 'Roles & Permissions'}
-              {activeTab === 'members' && 'Member Moderation'}
-              {activeTab === 'bans' && 'Banned Users'}
-            </h1>
-
-            <button
-              onClick={onClose}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-[var(--color-border-default)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] transition-all cursor-pointer text-xs font-semibold"
-            >
-              <X size={16} />
-              <span>ESC</span>
-            </button>
-          </div>
-
-          {/* Tab Contents */}
-          <div className="flex-1 overflow-y-auto p-8 max-w-5xl">
-            {/* 1. OVERVIEW TAB */}
-            {activeTab === 'overview' && (
-              <form onSubmit={handleSaveOverview} className="space-y-6">
-                {saveError && (
-                  <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm flex items-center gap-2">
-                    <AlertCircle size={18} />
-                    <span>{saveError}</span>
-                  </div>
-                )}
-                {saveSuccess && (
-                  <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm flex items-center gap-2">
-                    <Check size={18} />
-                    <span>Server settings updated successfully!</span>
-                  </div>
-                )}
-
-                {/* Server Icon & Name Row */}
-                <div className="flex items-center gap-6">
-                  <div className="relative group">
-                    <div
-                      className="w-24 h-24 rounded-3xl flex items-center justify-center text-3xl font-bold text-white shadow-xl overflow-hidden cursor-pointer"
-                      style={{
-                        background: iconPreview ? 'transparent' : 'var(--color-brand)',
-                        border: '2px dashed var(--color-border-default)',
-                      }}
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      {iconPreview ? (
-                        <img src={iconPreview} alt="Server Icon" className="w-full h-full object-cover" />
-                      ) : (
-                        serverName.substring(0, 2).toUpperCase() || 'PP'
-                      )}
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="absolute -bottom-2 -right-2 p-2 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] text-[var(--color-text-primary)] hover:bg-[var(--color-brand)] hover:text-white transition-all shadow-md"
-                    >
-                      <Upload size={14} />
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/png, image/jpeg, image/webp, image/gif"
-                      className="hidden"
-                      onChange={handleIconChange}
-                    />
-                  </div>
-
-                  <div className="flex-1">
-                    <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 block">
-                      Server Name
-                    </label>
-                    <input
-                      type="text"
-                      value={serverName}
-                      onChange={(e) => setServerName(e.target.value)}
-                      maxLength={50}
-                      required
-                      className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] focus:outline-none focus:border-[var(--color-brand)] font-semibold text-base"
-                    />
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1.5">
-                      Minimum 100x100 PNG, JPG, or GIF icon recommended. Max size 10MB.
-                    </p>
-                  </div>
+          {/* Left Settings Navigation Sidebar */}
+          <div className="w-full md:w-64 shrink-0 p-5 md:p-6 flex flex-col justify-between bg-[#080c13]/90 border-b md:border-b-0 md:border-r border-white/10">
+            <div className="space-y-6">
+              <div className="px-2 pb-3 border-b border-white/5">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-400 mb-1">
+                  Server Administration
                 </div>
+                <div className="text-sm font-extrabold text-slate-100 truncate">
+                  {settings?.name || 'PeaceParrot Hub'}
+                </div>
+              </div>
 
-                {/* Server Description */}
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 block">
-                    Server Description / Topic
-                  </label>
-                  <textarea
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    rows={3}
-                    maxLength={300}
-                    placeholder="Tell your members what this server is about..."
-                    className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] focus:outline-none focus:border-[var(--color-brand)] text-sm"
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-3 mb-2">
+                  General
+                </p>
+                <div className="space-y-1.5">
+                  <NavTabButton
+                    active={activeTab === 'overview'}
+                    onClick={() => setActiveTab('overview')}
+                    icon={<Settings size={16} />}
+                    label="Server Overview"
+                  />
+                  <NavTabButton
+                    active={activeTab === 'channels'}
+                    onClick={() => setActiveTab('channels')}
+                    icon={<Hash size={16} />}
+                    label="Channels"
+                  />
+                  <NavTabButton
+                    active={activeTab === 'roles'}
+                    onClick={() => setActiveTab('roles')}
+                    icon={<Shield size={16} />}
+                    label="Roles & Permissions"
                   />
                 </div>
+              </div>
 
-                {/* Slow Mode */}
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 block">
-                    Default Slow Mode
-                  </label>
-                  <select
-                    value={slowMode}
-                    onChange={(e) => setSlowMode(Number(e.target.value))}
-                    className="w-full px-4 py-2.5 rounded-xl bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] focus:outline-none focus:border-[var(--color-brand)] text-sm"
-                  >
-                    <option value={0}>Off (No rate limit)</option>
-                    <option value={5}>5 seconds</option>
-                    <option value={10}>10 seconds</option>
-                    <option value={15}>15 seconds</option>
-                    <option value={30}>30 seconds</option>
-                    <option value={60}>1 minute</option>
-                    <option value={120}>2 minutes</option>
-                    <option value={300}>5 minutes</option>
-                  </select>
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 px-3 mb-2">
+                  User Moderation
+                </p>
+                <div className="space-y-1.5">
+                  <NavTabButton
+                    active={activeTab === 'members'}
+                    onClick={() => setActiveTab('members')}
+                    icon={<Users size={16} />}
+                    label="Members Directory"
+                  />
+                  <NavTabButton
+                    active={activeTab === 'bans'}
+                    onClick={() => setActiveTab('bans')}
+                    icon={<Ban size={16} />}
+                    label={`Bans (${bans.length})`}
+                  />
                 </div>
+              </div>
+            </div>
+          </div>
 
-                {/* Save Button */}
-                <div className="pt-4 border-t border-[var(--color-border-default)] flex justify-end">
-                  <button
-                    type="submit"
-                    disabled={isSaving}
-                    className="px-6 py-2.5 rounded-xl bg-[var(--color-brand)] hover:opacity-90 text-white font-semibold shadow-lg transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    {isSaving ? 'Saving Changes...' : 'Save Changes'}
-                  </button>
+          {/* Right Content Panel */}
+          <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0c1017]/70 overflow-hidden">
+            {/* Top Bar with ESC close button */}
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 md:px-8 py-4 bg-[#0c1017]/90 backdrop-blur-xl border-b border-white/10">
+              <div>
+                <h1 className="text-lg md:text-xl font-extrabold text-slate-100 flex items-center gap-2.5">
+                  {activeTab === 'overview' && (
+                    <>
+                      <Settings size={20} className="text-emerald-400" />
+                      <span>Server Overview & Settings</span>
+                    </>
+                  )}
+                  {activeTab === 'channels' && (
+                    <>
+                      <Hash size={20} className="text-emerald-400" />
+                      <span>Channel Management</span>
+                    </>
+                  )}
+                  {activeTab === 'roles' && (
+                    <>
+                      <Shield size={20} className="text-emerald-400" />
+                      <span>Roles & Access Control</span>
+                    </>
+                  )}
+                  {activeTab === 'members' && (
+                    <>
+                      <Users size={20} className="text-emerald-400" />
+                      <span>Member Moderation & Roles</span>
+                    </>
+                  )}
+                  {activeTab === 'bans' && (
+                    <>
+                      <Ban size={20} className="text-emerald-400" />
+                      <span>Banned Users</span>
+                    </>
+                  )}
+                </h1>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {activeTab === 'overview' && 'Configure server branding, topic descriptions, and slow-mode limits'}
+                  {activeTab === 'channels' && 'Create, reorder, or delete voice and text chat rooms'}
+                  {activeTab === 'roles' && 'Assign custom badges, colors, and moderation rights to community roles'}
+                  {activeTab === 'members' && 'Manage member permissions, muting, and server access'}
+                  {activeTab === 'bans' && 'Inspect and manage banned accounts for this community'}
+                </p>
+              </div>
+
+              <button
+                onClick={onClose}
+                className="flex flex-col items-center group cursor-pointer"
+                title="Close Settings (ESC)"
+              >
+                <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-white/10 transition-all">
+                  <X size={16} />
                 </div>
-              </form>
-            )}
+                <span className="text-[9px] font-bold text-slate-500 mt-1">ESC</span>
+              </button>
+            </div>
 
-            {/* 2. CHANNELS TAB */}
-            {activeTab === 'channels' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-[var(--color-text-secondary)]">
-                    Manage channels and voice rooms in this server.
-                  </p>
-                  <button
-                    onClick={() => setShowCreateChannel(true)}
-                    className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[var(--color-brand)] text-white text-sm font-semibold hover:opacity-90 transition-all shadow-md cursor-pointer"
-                  >
-                    <Plus size={16} />
-                    <span>Create Channel</span>
-                  </button>
-                </div>
+            {/* Tab Contents */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8">
+              {/* 1. OVERVIEW TAB */}
+              {activeTab === 'overview' && (
+                <form onSubmit={handleSaveOverview} className="max-w-2xl space-y-6">
+                  {saveError && (
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center gap-2">
+                      <AlertCircle size={16} />
+                      <span>{saveError}</span>
+                    </div>
+                  )}
+                  {saveSuccess && (
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
+                      <Check size={16} />
+                      <span>Server settings updated successfully!</span>
+                    </div>
+                  )}
 
-                <div className="space-y-2">
-                  {channels.map((ch) => (
-                    <div
-                      key={ch.id}
-                      className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-base text-[var(--color-text-muted)]">
-                          {ch.type === 'text' ? '#' : '🔊'}
-                        </span>
-                        <div>
-                          <div className="font-semibold text-sm text-[var(--color-text-primary)]">
-                            {ch.name}
-                          </div>
-                          {ch.topic && (
-                            <div className="text-xs text-[var(--color-text-muted)] truncate max-w-md">
-                              {ch.topic}
-                            </div>
-                          )}
-                        </div>
+                  {/* Server Icon & Name Row */}
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 flex flex-col sm:flex-row items-center gap-6">
+                    <div className="relative group shrink-0">
+                      <div
+                        className="w-24 h-24 rounded-2xl flex items-center justify-center text-3xl font-black text-white shadow-2xl overflow-hidden cursor-pointer border border-white/10 bg-gradient-to-br from-emerald-600 to-teal-800 transition-transform group-hover:scale-105"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        {iconPreview ? (
+                          <img src={iconPreview} alt="Server Icon" className="w-full h-full object-cover" />
+                        ) : (
+                          serverName.substring(0, 2).toUpperCase() || 'PP'
+                        )}
                       </div>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="absolute -bottom-1.5 -right-1.5 p-2 rounded-xl bg-[#090d14] border border-white/20 text-slate-300 hover:text-white hover:bg-emerald-600 transition-all shadow-lg cursor-pointer"
+                        title="Upload New Icon"
+                      >
+                        <Upload size={13} />
+                      </button>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/png, image/jpeg, image/webp, image/gif"
+                        className="hidden"
+                        onChange={handleIconChange}
+                      />
+                    </div>
 
-                      <div className="flex items-center gap-2">
+                    <div className="flex-1 w-full space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                        Server Community Name
+                      </label>
+                      <input
+                        type="text"
+                        value={serverName}
+                        onChange={(e) => setServerName(e.target.value)}
+                        maxLength={50}
+                        required
+                        className="w-full px-4 py-2.5 rounded-xl bg-black/40 text-slate-100 border border-white/10 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 font-bold text-sm transition-all"
+                      />
+                      <p className="text-[11px] text-slate-400">
+                        Recommended 256x256 PNG, JPG, or GIF icon. Max file size: 10MB.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Server Description */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                      Server Description & Topic
+                    </label>
+                    <textarea
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      rows={3}
+                      maxLength={300}
+                      placeholder="Welcome members and describe what this server is about..."
+                      className="w-full px-4 py-3 rounded-xl bg-black/40 text-slate-100 border border-white/10 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 text-sm transition-all resize-none"
+                    />
+                  </div>
+
+                  {/* Slow Mode */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                      Default Channel Slow Mode (Rate Limit)
+                    </label>
+                    <select
+                      value={slowMode}
+                      onChange={(e) => setSlowMode(Number(e.target.value))}
+                      className="w-full px-4 py-2.5 rounded-xl bg-[#080c14] text-slate-100 border border-white/10 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 text-sm cursor-pointer"
+                    >
+                      <option value={0}>Disabled (No rate limit)</option>
+                      <option value={5}>5 seconds</option>
+                      <option value={10}>10 seconds</option>
+                      <option value={15}>15 seconds</option>
+                      <option value={30}>30 seconds</option>
+                      <option value={60}>1 minute</option>
+                      <option value={120}>2 minutes</option>
+                      <option value={300}>5 minutes</option>
+                    </select>
+                  </div>
+
+                  {/* Save Button */}
+                  <div className="pt-4 border-t border-white/10 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={isSaving}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-sm shadow-[0_4px_20px_rgba(16,185,129,0.35)] transition-all cursor-pointer disabled:opacity-50"
+                    >
+                      {isSaving ? 'Saving Changes...' : 'Save Server Settings'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* 2. CHANNELS TAB */}
+              {activeTab === 'channels' && (
+                <div className="max-w-3xl space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-slate-200">Active Server Channels</h3>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Manage channel topics, voice lounges, and stream rooms
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setShowCreateChannel(true)}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-500 transition-all shadow-[0_4px_15px_rgba(16,185,129,0.3)] cursor-pointer"
+                    >
+                      <Plus size={15} />
+                      <span>Create Channel</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {channels.map((ch) => (
+                      <div
+                        key={ch.id}
+                        className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all"
+                      >
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="w-9 h-9 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center text-slate-400 font-bold shrink-0">
+                            {ch.type === 'text' ? '#' : <Volume2 size={16} className="text-emerald-400" />}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                              <span>{ch.name}</span>
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 font-mono uppercase">
+                                {ch.type}
+                              </span>
+                            </div>
+                            {ch.topic && (
+                              <div className="text-xs text-slate-400 truncate max-w-lg mt-0.5">
+                                {ch.topic}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
                         <button
                           onClick={() => handleDeleteChannel(ch.id, ch.name)}
-                          className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                          className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
                           title="Delete Channel"
                         >
                           <Trash2 size={16} />
                         </button>
                       </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* 3. ROLES & PERMISSIONS TAB */}
-            {activeTab === 'roles' && (
-              <div className="flex gap-6 min-h-[450px]">
-                {/* Role List Sidebar */}
-                <div className="w-56 shrink-0 flex flex-col gap-2 p-3 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                  <div className="flex items-center justify-between px-2 mb-1">
-                    <span className="text-xs font-bold uppercase text-[var(--color-text-muted)]">Roles</span>
-                    <button
-                      onClick={handleCreateRole}
-                      disabled={isCreatingRole}
-                      className="flex items-center gap-1 text-xs font-semibold text-[var(--color-brand)] hover:underline cursor-pointer"
-                    >
-                      <Plus size={14} />
-                      <span>Create</span>
-                    </button>
-                  </div>
-
-                  <div className="space-y-1 overflow-y-auto flex-1">
-                    {roles.map((r) => (
-                      <button
-                        key={r.id}
-                        onClick={() => setSelectedRoleId(r.id)}
-                        className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left ${
-                          selectedRoleId === r.id
-                            ? 'bg-[var(--color-brand)] text-white shadow-md'
-                            : 'text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)]'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 truncate">
-                          <span
-                            className="w-3 h-3 rounded-full shrink-0 shadow-sm"
-                            style={{ backgroundColor: r.color || '#5865F2' }}
-                          />
-                          <span className="truncate">{r.name}</span>
-                          <RoleBadge role={r} />
-                        </div>
-                      </button>
                     ))}
                   </div>
                 </div>
+              )}
 
-                {/* Role Editor Panel */}
-                <div className="flex-1 p-6 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] space-y-6">
-                  {selectedRole ? (
-                    <>
-                      <div className="flex items-center justify-between pb-4 border-b border-[var(--color-border-default)]">
-                        <div>
-                          <h3 className="font-bold text-base text-[var(--color-text-primary)]">
-                            Edit Role — {editRoleName}
-                          </h3>
-                          <p className="text-xs text-[var(--color-text-muted)]">
-                            Customize role appearance and server permissions
-                          </p>
-                        </div>
-                        {selectedRole.id !== 'role-admin' && (
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteRole(selectedRole.id, selectedRole.name)}
-                            className="p-2 rounded-xl text-red-400 hover:bg-red-500/10 transition-colors"
-                            title="Delete Role"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        )}
-                      </div>
+              {/* 3. ROLES & PERMISSIONS TAB */}
+              {activeTab === 'roles' && (
+                <div className="flex flex-col lg:flex-row gap-6 min-h-[480px]">
+                  {/* Role List Sidebar */}
+                  <div className="w-full lg:w-60 shrink-0 flex flex-col gap-2 p-3.5 rounded-2xl bg-white/[0.03] border border-white/10">
+                    <div className="flex items-center justify-between px-2 mb-1">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Roles List</span>
+                      <button
+                        onClick={handleCreateRole}
+                        disabled={isCreatingRole}
+                        className="flex items-center gap-1 text-xs font-bold text-emerald-400 hover:text-emerald-300 cursor-pointer"
+                      >
+                        <Plus size={13} />
+                        <span>Create</span>
+                      </button>
+                    </div>
 
-                      {/* Role Name */}
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-1.5 block">
-                          Role Name
-                        </label>
-                        <input
-                          type="text"
-                          value={editRoleName}
-                          onChange={(e) => setEditRoleName(e.target.value)}
-                          maxLength={32}
-                          className="w-full px-4 py-2 rounded-xl bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] text-sm font-semibold focus:outline-none focus:border-[var(--color-brand)]"
-                        />
-                      </div>
-
-                      {/* Role Color */}
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-2 block">
-                          Role Color
-                        </label>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {COLOR_PALETTE.map((color) => (
-                            <button
-                              key={color}
-                              type="button"
-                              onClick={() => setEditRoleColor(color)}
-                              className={`w-8 h-8 rounded-xl transition-transform cursor-pointer shadow-md ${
-                                editRoleColor.toLowerCase() === color.toLowerCase()
-                                  ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[var(--color-bg-secondary)]'
-                                  : 'hover:scale-105'
-                              }`}
-                              style={{ backgroundColor: color }}
+                    <div className="space-y-1 overflow-y-auto flex-1 max-h-[350px] lg:max-h-none">
+                      {roles.map((r) => (
+                        <button
+                          key={r.id}
+                          onClick={() => setSelectedRoleId(r.id)}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-xs font-bold transition-all text-left cursor-pointer ${
+                            selectedRoleId === r.id
+                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-md'
+                              : 'text-slate-300 hover:bg-white/5 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm"
+                              style={{ backgroundColor: r.color || '#10B981' }}
                             />
-                          ))}
-                          <input
-                            type="color"
-                            value={editRoleColor}
-                            onChange={(e) => setEditRoleColor(e.target.value)}
-                            className="w-8 h-8 rounded-xl cursor-pointer bg-transparent border-0"
-                            title="Custom Hex Color"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Role Icon / Badge Photo */}
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-2 block">
-                          Role Icon & Badge (Rendered next to member name in chat)
-                        </label>
-                        <div className="flex items-center gap-4 flex-wrap">
-                          {/* Image preview or emoji preview */}
-                          <div
-                            className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] shadow-sm shrink-0 overflow-hidden"
-                            title="Current Role Icon"
-                          >
-                            {editRoleIcon &&
-                            (editRoleIcon.startsWith('http') ||
-                              editRoleIcon.startsWith('data:') ||
-                              editRoleIcon.startsWith('/')) ? (
-                              <img src={editRoleIcon} alt="Role Icon" className="w-full h-full object-cover" />
-                            ) : editRoleIcon ? (
-                              <span>{editRoleIcon}</span>
-                            ) : (
-                              <span className="text-xs text-[var(--color-text-muted)] font-medium">None</span>
-                            )}
+                            <span className="truncate">{r.name}</span>
+                            <RoleBadge role={r} />
                           </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
 
-                          {/* Upload Photo Button */}
-                          <button
-                            type="button"
-                            onClick={() => roleIconInputRef.current?.click()}
-                            disabled={isUploadingRoleIcon}
-                            className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] border border-[var(--color-border-default)] text-xs font-semibold text-[var(--color-text-primary)] transition-all cursor-pointer shadow-sm"
-                          >
-                            <Upload size={14} />
-                            <span>{isUploadingRoleIcon ? 'Uploading...' : 'Upload Image Photo'}</span>
-                          </button>
-                          <input
-                            ref={roleIconInputRef}
-                            type="file"
-                            accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml"
-                            className="hidden"
-                            onChange={handleRoleIconUpload}
-                          />
-
-                          {editRoleIcon && (
+                  {/* Role Editor Panel */}
+                  <div className="flex-1 p-6 rounded-2xl bg-white/[0.03] border border-white/10 space-y-6">
+                    {selectedRole ? (
+                      <>
+                        <div className="flex items-center justify-between pb-4 border-b border-white/10">
+                          <div>
+                            <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
+                              <span>Edit Role:</span>
+                              <span style={{ color: editRoleColor }}>{editRoleName}</span>
+                            </h3>
+                            <p className="text-xs text-slate-400">
+                              Customize badge flair, colors, and server permissions
+                            </p>
+                          </div>
+                          {selectedRole.id !== 'role-admin' && (
                             <button
                               type="button"
-                              onClick={() => setEditRoleIcon('')}
-                              className="text-xs font-semibold text-red-400 hover:underline cursor-pointer"
+                              onClick={() => handleDeleteRole(selectedRole.id, selectedRole.name)}
+                              className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                              title="Delete Role"
                             >
-                              Remove Icon
+                              <Trash2 size={16} />
                             </button>
                           )}
                         </div>
 
-                        {/* Quick Emoji Swatches */}
-                        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs text-[var(--color-text-muted)] mr-1">Or pick emoji:</span>
-                          {ROLE_EMOJIS.map((emoji) => (
-                            <button
-                              key={emoji}
-                              type="button"
-                              onClick={() => setEditRoleIcon(emoji)}
-                              className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:scale-110 transition-transform cursor-pointer border ${
-                                editRoleIcon === emoji ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/20' : 'border-transparent'
-                              }`}
-                            >
-                              {emoji}
-                            </button>
-                          ))}
+                        {/* Role Name */}
+                        <div className="space-y-1.5">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                            Role Name
+                          </label>
+                          <input
+                            type="text"
+                            value={editRoleName}
+                            onChange={(e) => setEditRoleName(e.target.value)}
+                            maxLength={32}
+                            className="w-full px-4 py-2.5 rounded-xl bg-black/40 text-slate-100 border border-white/10 text-sm font-semibold focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20"
+                          />
                         </div>
-                      </div>
 
-                      {/* Permissions Checklist */}
-                      <div>
-                        <label className="text-xs font-bold uppercase tracking-wider text-[var(--color-text-secondary)] mb-2 block">
-                          Permissions
-                        </label>
+                        {/* Role Color */}
                         <div className="space-y-2">
-                          {[
-                            { id: 1, label: 'Administrator', desc: 'Grants all permissions and bypasses all restrictions' },
-                            { id: 2, label: 'Manage Server', desc: 'Change server name, icon, and default settings' },
-                            { id: 4, label: 'Manage Channels', desc: 'Create, edit topics, and delete channels' },
-                            { id: 8, label: 'Kick Members', desc: 'Remove members from the server' },
-                            { id: 16, label: 'Ban Members', desc: 'Permanently ban members from the server' },
-                            { id: 32, label: 'Mute Members', desc: 'Silence members in voice and text channels' },
-                            { id: 64, label: 'Send Messages', desc: 'Post messages and media in text channels' },
-                            { id: 128, label: 'Connect Voice', desc: 'Join and speak in voice channels' },
-                          ].map((perm) => {
-                            const isChecked = (editRolePerms & perm.id) === perm.id
-                            return (
-                              <label
-                                key={perm.id}
-                                className="flex items-center justify-between p-3 rounded-xl bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] cursor-pointer hover:bg-[var(--color-bg-hover)] transition-colors"
-                              >
-                                <div>
-                                  <div className="text-xs font-semibold text-[var(--color-text-primary)]">
-                                    {perm.label}
-                                  </div>
-                                  <div className="text-[11px] text-[var(--color-text-muted)]">{perm.desc}</div>
-                                </div>
-                                <input
-                                  type="checkbox"
-                                  checked={isChecked}
-                                  onChange={(e) => {
-                                    if (e.target.checked) {
-                                      setEditRolePerms((prev) => prev | perm.id)
-                                    } else {
-                                      setEditRolePerms((prev) => prev & ~perm.id)
-                                    }
-                                  }}
-                                  className="w-4 h-4 rounded text-[var(--color-brand)] cursor-pointer"
-                                />
-                              </label>
-                            )
-                          })}
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                            Role Color
+                          </label>
+                          <div className="flex flex-wrap items-center gap-2.5">
+                            {COLOR_PALETTE.map((color) => (
+                              <button
+                                key={color}
+                                type="button"
+                                onClick={() => setEditRoleColor(color)}
+                                className={`w-8 h-8 rounded-xl transition-all cursor-pointer shadow-md border ${
+                                  editRoleColor.toLowerCase() === color.toLowerCase()
+                                    ? 'scale-110 border-white ring-2 ring-emerald-400'
+                                    : 'border-white/10 hover:scale-105'
+                                }`}
+                                style={{ backgroundColor: color }}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={editRoleColor}
+                              onChange={(e) => setEditRoleColor(e.target.value)}
+                              className="w-8 h-8 rounded-xl cursor-pointer bg-transparent border-0"
+                              title="Custom Color"
+                            />
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Save Role Button */}
-                      <div className="flex justify-end pt-3 border-t border-[var(--color-border-default)]">
-                        <button
-                          type="button"
-                          onClick={handleSaveRole}
-                          className="px-5 py-2 rounded-xl bg-[var(--color-brand)] hover:opacity-90 text-white text-xs font-semibold shadow-md cursor-pointer transition-all"
-                        >
-                          Save Role
-                        </button>
+                        {/* Role Icon / Badge Photo */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                            Role Icon & Badge
+                          </label>
+                          <div className="flex items-center gap-4 flex-wrap">
+                            <div
+                              className="w-12 h-12 rounded-xl flex items-center justify-center text-xl bg-black/40 border border-white/10 shadow-sm shrink-0 overflow-hidden"
+                              title="Current Role Icon"
+                            >
+                              {editRoleIcon &&
+                              (editRoleIcon.startsWith('http') ||
+                                editRoleIcon.startsWith('data:') ||
+                                editRoleIcon.startsWith('/')) ? (
+                                <img src={editRoleIcon} alt="Role Icon" className="w-full h-full object-cover" />
+                              ) : editRoleIcon ? (
+                                <span>{editRoleIcon}</span>
+                              ) : (
+                                <span className="text-xs text-slate-400 font-medium">None</span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => roleIconInputRef.current?.click()}
+                              disabled={isUploadingRoleIcon}
+                              className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-bold text-slate-200 transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                            >
+                              <Upload size={13} />
+                              <span>{isUploadingRoleIcon ? 'Uploading...' : 'Upload Image'}</span>
+                            </button>
+                            <input
+                              ref={roleIconInputRef}
+                              type="file"
+                              accept="image/png, image/jpeg, image/webp, image/gif, image/svg+xml"
+                              className="hidden"
+                              onChange={handleRoleIconUpload}
+                            />
+
+                            {editRoleIcon && (
+                              <button
+                                type="button"
+                                onClick={() => setEditRoleIcon('')}
+                                className="text-xs font-semibold text-rose-400 hover:underline cursor-pointer"
+                              >
+                                Remove Icon
+                              </button>
+                            )}
+                          </div>
+
+                          {/* Quick Emoji Swatches */}
+                          <div className="pt-2 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] text-slate-400 mr-1">Or choose emoji:</span>
+                            {ROLE_EMOJIS.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                onClick={() => setEditRoleIcon(emoji)}
+                                className={`w-7 h-7 rounded-lg text-sm flex items-center justify-center bg-white/5 hover:scale-110 transition-transform cursor-pointer border ${
+                                  editRoleIcon === emoji ? 'border-emerald-500 bg-emerald-500/20' : 'border-transparent'
+                                }`}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Permissions Checklist */}
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-slate-300 block">
+                            Permissions Matrix
+                          </label>
+                          <div className="space-y-2">
+                            {[
+                              { id: 1, label: 'Administrator', desc: 'Grants all permissions and bypasses server limits' },
+                              { id: 2, label: 'Manage Server', desc: 'Change server branding, icon, and rate limits' },
+                              { id: 4, label: 'Manage Channels', desc: 'Create, reorder, edit topics, and delete channels' },
+                              { id: 8, label: 'Kick Members', desc: 'Remove disruptive users from the community' },
+                              { id: 16, label: 'Ban Members', desc: 'Permanently blacklist malicious users' },
+                              { id: 32, label: 'Mute Members', desc: 'Temporarily silence members in voice and text' },
+                              { id: 64, label: 'Send Messages', desc: 'Post text messages and attachments in channels' },
+                              { id: 128, label: 'Connect Voice', desc: 'Join voice channels and transmit microphone audio' },
+                            ].map((perm) => {
+                              const isChecked = (editRolePerms & perm.id) === perm.id
+                              return (
+                                <label
+                                  key={perm.id}
+                                  className="flex items-center justify-between p-3.5 rounded-xl bg-black/40 border border-white/5 hover:border-white/15 cursor-pointer transition-colors"
+                                >
+                                  <div>
+                                    <div className="text-xs font-bold text-slate-200">
+                                      {perm.label}
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 mt-0.5">{perm.desc}</div>
+                                  </div>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setEditRolePerms((prev) => prev | perm.id)
+                                      } else {
+                                        setEditRolePerms((prev) => prev & ~perm.id)
+                                      }
+                                    }}
+                                    className="w-4 h-4 accent-emerald-500 cursor-pointer"
+                                  />
+                                </label>
+                              )
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Save Role Button */}
+                        <div className="flex justify-end pt-3 border-t border-white/10">
+                          <button
+                            type="button"
+                            onClick={handleSaveRole}
+                            className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-[0_4px_15px_rgba(16,185,129,0.3)] cursor-pointer transition-all"
+                          >
+                            Save Role Changes
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-12 text-slate-400">
+                        Select a role to configure
                       </div>
-                    </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 4. MEMBERS TAB */}
+              {activeTab === 'members' && (
+                <div className="max-w-3xl space-y-6">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="relative flex-1 max-w-sm">
+                      <Search size={15} className="absolute left-3.5 top-3 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Filter members by name..."
+                        value={memberSearch}
+                        onChange={(e) => setMemberSearch(e.target.value)}
+                        className="w-full pl-9 pr-4 py-2 rounded-xl bg-black/40 text-slate-100 border border-white/10 text-xs focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20"
+                      />
+                    </div>
+                    <div className="text-xs font-bold text-slate-400">
+                      {filteredMembers.length} Members
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {filteredMembers.map((m) => {
+                      const isSelf = m.id === currentUser?.id
+                      return (
+                        <div
+                          key={m.id}
+                          className="flex items-center justify-between p-3.5 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/15 transition-all"
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-black text-sm overflow-hidden shrink-0 shadow-sm">
+                              {m.avatarUrl ? (
+                                <img src={m.avatarUrl} alt={m.username} className="w-full h-full object-cover" />
+                              ) : (
+                                m.username.substring(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-sm text-slate-100 flex items-center gap-2 truncate">
+                                <span>{m.displayName || m.username}</span>
+                                {isSelf && (
+                                  <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 font-extrabold tracking-wider">
+                                    YOU
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-xs text-slate-400 font-mono">@{m.username}</div>
+                            </div>
+                          </div>
+
+                          {/* Roles and Actions */}
+                          <div className="flex items-center gap-3 shrink-0">
+                            <select
+                              value={m.role || 'Member'}
+                              disabled={isSelf}
+                              onChange={(e) => handleRoleChange(m.id, e.target.value as any)}
+                              className="px-3 py-1.5 rounded-xl bg-[#080c14] text-slate-200 border border-white/10 text-xs font-semibold focus:outline-none focus:border-emerald-500/60 cursor-pointer disabled:opacity-50"
+                            >
+                              {roles.map((r) => (
+                                <option key={r.id} value={r.name}>
+                                  {r.name}
+                                </option>
+                              ))}
+                            </select>
+
+                            {!isSelf && (
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => handleMute(m.id, m.username)}
+                                  className="p-2 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                                  title="Mute Member"
+                                >
+                                  <MicOff size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleKick(m.id, m.username)}
+                                  className="p-2 rounded-xl text-slate-400 hover:text-orange-400 hover:bg-orange-500/10 transition-colors cursor-pointer"
+                                  title="Kick Member"
+                                >
+                                  <UserX size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleBan(m.id, m.username)}
+                                  className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
+                                  title="Ban Member"
+                                >
+                                  <Ban size={15} />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* 5. BANS TAB */}
+              {activeTab === 'bans' && (
+                <div className="max-w-3xl space-y-6">
+                  <p className="text-xs text-slate-400">
+                    Banned user accounts are restricted from joining channels or accessing messages.
+                  </p>
+
+                  {bans.length === 0 ? (
+                    <div className="text-center py-16 p-8 rounded-2xl bg-white/[0.02] border border-white/5 text-slate-400">
+                      <Shield size={40} className="mx-auto mb-3 text-emerald-400 opacity-40" />
+                      <p className="font-bold text-sm text-slate-300">No Banned Users</p>
+                      <p className="text-xs text-slate-400 mt-1">Peace reigns in PeaceParrot!</p>
+                    </div>
                   ) : (
-                    <div className="text-center py-12 text-[var(--color-text-muted)]">
-                      Select a role to edit
+                    <div className="space-y-2">
+                      {bans.map((ban) => (
+                        <div
+                          key={ban.id}
+                          className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10"
+                        >
+                          <div className="flex items-center gap-3.5">
+                            <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
+                              {ban.avatarUrl ? (
+                                <img src={ban.avatarUrl} alt={ban.username} className="w-full h-full object-cover" />
+                              ) : (
+                                ban.username.substring(0, 2).toUpperCase()
+                              )}
+                            </div>
+                            <div>
+                              <div className="font-bold text-sm text-slate-100">
+                                @{ban.username}
+                              </div>
+                              <div className="text-xs text-slate-400 mt-0.5">
+                                Banned by {ban.bannedBy} on {new Date(ban.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                          </div>
+
+                          <button
+                            onClick={() => handleUnban(ban.userId, ban.username)}
+                            className="px-4 py-2 rounded-xl bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer"
+                          >
+                            Revoke Ban
+                          </button>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* 4. MEMBERS TAB */}
-            {activeTab === 'members' && (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="relative flex-1 max-w-sm">
-                    <Search size={16} className="absolute left-3 top-3 text-[var(--color-text-muted)]" />
-                    <input
-                      type="text"
-                      placeholder="Search members..."
-                      value={memberSearch}
-                      onChange={(e) => setMemberSearch(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 rounded-xl bg-[var(--color-bg-secondary)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] text-sm focus:outline-none focus:border-[var(--color-brand)]"
-                    />
-                  </div>
-                  <div className="text-xs font-semibold text-[var(--color-text-muted)]">
-                    {filteredMembers.length} Members
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  {filteredMembers.map((m) => {
-                    const isSelf = m.id === currentUser?.id
-                    return (
-                      <div
-                        key={m.id}
-                        className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-[var(--color-brand)] text-white flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
-                            {m.avatarUrl ? (
-                              <img src={m.avatarUrl} alt={m.username} className="w-full h-full object-cover" />
-                            ) : (
-                              m.username.substring(0, 2).toUpperCase()
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-sm text-[var(--color-text-primary)] flex items-center gap-1.5">
-                              <span>{m.displayName || m.username}</span>
-                              {isSelf && (
-                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--color-brand)]/20 text-[var(--color-brand)] font-bold">
-                                  YOU
-                                </span>
-                              )}
-                            </div>
-                            <div className="text-xs text-[var(--color-text-muted)]">@{m.username}</div>
-                          </div>
-                        </div>
-
-                        {/* Roles and Actions */}
-                        <div className="flex items-center gap-3">
-                          <select
-                            value={m.role || 'Member'}
-                            disabled={isSelf}
-                            onChange={(e) => handleRoleChange(m.id, e.target.value as any)}
-                            className="px-3 py-1.5 rounded-lg bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] border border-[var(--color-border-default)] text-xs font-medium focus:outline-none focus:border-[var(--color-brand)]"
-                          >
-                            {roles.map((r) => (
-                              <option key={r.id} value={r.name}>
-                                {r.name}
-                              </option>
-                            ))}
-                          </select>
-
-                          {!isSelf && (
-                            <div className="flex items-center gap-1">
-                              <button
-                                onClick={() => handleMute(m.id, m.username)}
-                                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-amber-400 hover:bg-amber-500/10 transition-colors"
-                                title="Mute User"
-                              >
-                                <MicOff size={16} />
-                              </button>
-                              <button
-                                onClick={() => handleKick(m.id, m.username)}
-                                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-orange-400 hover:bg-orange-500/10 transition-colors"
-                                title="Kick User"
-                              >
-                                <UserX size={16} />
-                              </button>
-                              <button
-                                onClick={() => handleBan(m.id, m.username)}
-                                className="p-1.5 rounded-lg text-[var(--color-text-muted)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                title="Ban User"
-                              >
-                                <Ban size={16} />
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* 5. BANS TAB */}
-            {activeTab === 'bans' && (
-              <div className="space-y-6">
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Banned users cannot rejoin or access this server unless unbanned.
-                </p>
-
-                {bans.length === 0 ? (
-                  <div className="text-center py-12 text-[var(--color-text-muted)]">
-                    <Shield size={48} className="mx-auto mb-3 opacity-30" />
-                    <p className="font-medium text-sm">No banned users</p>
-                    <p className="text-xs mt-1">Peace reigns in PeaceParrot!</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {bans.map((ban) => (
-                      <div
-                        key={ban.id}
-                        className="flex items-center justify-between p-3.5 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-red-500/20 text-red-400 flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
-                            {ban.avatarUrl ? (
-                              <img src={ban.avatarUrl} alt={ban.username} className="w-full h-full object-cover" />
-                            ) : (
-                              ban.username.substring(0, 2).toUpperCase()
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-semibold text-sm text-[var(--color-text-primary)]">
-                              @{ban.username}
-                            </div>
-                            <div className="text-xs text-[var(--color-text-muted)]">
-                              Banned by {ban.bannedBy} on {new Date(ban.createdAt).toLocaleDateString()}
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          onClick={() => handleUnban(ban.userId, ban.username)}
-                          className="px-3 py-1.5 rounded-xl bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 text-xs font-semibold transition-all cursor-pointer"
-                        >
-                          Revoke Ban
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -1078,5 +1104,31 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
         onCancel={() => setConfirmDialog((prev) => ({ ...prev, isOpen: false }))}
       />
     </>
+  )
+}
+
+function NavTabButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean
+  onClick: () => void
+  icon: React.ReactNode
+  label: string
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
+        active
+          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
   )
 }

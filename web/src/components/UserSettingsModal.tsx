@@ -12,10 +12,11 @@ import {
   Keyboard,
   RotateCcw,
   Sparkles,
-  Speaker,
+  Volume2,
   Upload,
   Image as ImageIcon,
   Loader2,
+  Radio,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useThemeStore } from '../stores/themeStore'
@@ -33,21 +34,21 @@ interface UserSettingsModalProps {
 type TabType = 'profile' | 'voice' | 'notifications' | 'appearance'
 
 const AVATAR_GRADIENT_PRESETS = [
-  { id: 'parrot-blue', name: 'Parrot Indigo', bg: 'linear-gradient(135deg, #5865f2, #00b0f4)' },
-  { id: 'emerald', name: 'Emerald Forest', bg: 'linear-gradient(135deg, #23a559, #059669)' },
-  { id: 'sunset', name: 'Golden Sunset', bg: 'linear-gradient(135deg, #f0b232, #ea580c)' },
-  { id: 'neon-rose', name: 'Neon Rose', bg: 'linear-gradient(135deg, #ed4245, #db2777)' },
+  { id: 'parrot-emerald', name: 'Emerald Forest', bg: 'linear-gradient(135deg, #10b981, #059669)' },
+  { id: 'parrot-blue', name: 'Parrot Indigo', bg: 'linear-gradient(135deg, #6366f1, #0ea5e9)' },
+  { id: 'sunset', name: 'Golden Sunset', bg: 'linear-gradient(135deg, #f59e0b, #ea580c)' },
+  { id: 'neon-rose', name: 'Neon Rose', bg: 'linear-gradient(135deg, #f43f5e, #db2777)' },
   { id: 'cyberpunk', name: 'Cyber Violet', bg: 'linear-gradient(135deg, #8b5cf6, #ec4899)' },
   { id: 'deep-ocean', name: 'Deep Ocean', bg: 'linear-gradient(135deg, #0284c7, #1e3a8a)' },
 ]
 
 const BANNER_GRADIENT_PRESETS = [
-  { id: 'cyber-violet', name: 'Cyber Violet', bg: 'linear-gradient(135deg, #4f46e5, #06b6d4)' },
-  { id: 'sunset-blaze', name: 'Sunset Blaze', bg: 'linear-gradient(135deg, #f59e0b, #ef4444)' },
-  { id: 'emerald-aurora', name: 'Emerald Aurora', bg: 'linear-gradient(135deg, #10b981, #3b82f6)' },
-  { id: 'midnight-neon', name: 'Midnight Neon', bg: 'linear-gradient(135deg, #18181b, #8b5cf6)' },
-  { id: 'crimson-dark', name: 'Crimson Dark', bg: 'linear-gradient(135deg, #991b1b, #1e1b4b)' },
-  { id: 'deep-abyss', name: 'Deep Abyss', bg: 'linear-gradient(135deg, #09090b, #0284c7)' },
+  { id: 'emerald-aurora', name: 'Emerald Aurora', bg: 'linear-gradient(135deg, #064e3b, #047857, #10b981)' },
+  { id: 'cyber-violet', name: 'Cyber Violet', bg: 'linear-gradient(135deg, #312e81, #4f46e5, #06b6d4)' },
+  { id: 'sunset-blaze', name: 'Sunset Blaze', bg: 'linear-gradient(135deg, #7c2d12, #ea580c, #f59e0b)' },
+  { id: 'midnight-neon', name: 'Midnight Neon', bg: 'linear-gradient(135deg, #09090b, #18181b, #8b5cf6)' },
+  { id: 'crimson-dark', name: 'Crimson Dark', bg: 'linear-gradient(135deg, #450a0a, #991b1b, #1e1b4b)' },
+  { id: 'deep-abyss', name: 'Deep Abyss', bg: 'linear-gradient(135deg, #030712, #075985, #0284c7)' },
 ]
 
 export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
@@ -122,7 +123,6 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
         setAudioInputDevices(inputs)
         setAudioOutputDevices(outputs)
 
-        // Set default device if none selected
         if (!settings.inputDeviceId && inputs.length > 0) {
           updateSettings({ inputDeviceId: inputs[0].deviceId })
         }
@@ -189,7 +189,6 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
               sum += dataArray[i]
             }
             const average = sum / dataArray.length
-            // Apply input volume gain
             const scaled = (average / 128) * (settings.inputVolume / 100) * 100
             setMicVolume(Math.min(100, Math.round(scaled)))
             animFrameRef.current = requestAnimationFrame(checkVolume)
@@ -362,83 +361,128 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   const initials = (displayName || user?.username || 'U')[0].toUpperCase()
 
   return (
-    <div className="fixed inset-0 z-50 flex animate-fade-in bg-black/75 backdrop-blur-md">
-      <div className="w-full h-full flex max-w-5xl mx-auto my-auto max-h-[88vh] rounded-2xl overflow-hidden shadow-2xl border border-[var(--color-border-default)] bg-[var(--color-bg-primary)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-2xl animate-fade-in">
+      <div className="w-full max-w-5xl h-[88vh] flex flex-col md:flex-row rounded-3xl overflow-hidden bg-[#0c1017]/95 border border-white/10 shadow-[0_25px_70px_rgba(0,0,0,0.85)] relative">
+        
+        {/* Ambient Top Glow */}
+        <div className="absolute top-0 left-1/4 right-1/4 h-[1px] bg-gradient-to-r from-transparent via-emerald-500/40 to-transparent pointer-events-none" />
+
         {/* Left Sidebar Navigation */}
-        <div
-          className="w-64 shrink-0 p-6 flex flex-col justify-between"
-          style={{ background: 'var(--color-bg-tertiary)', borderRight: '1px solid var(--color-border-default)' }}
-        >
+        <div className="w-full md:w-64 shrink-0 p-5 md:p-6 flex flex-col justify-between bg-[#080c13]/90 border-b md:border-b-0 md:border-r border-white/10">
           <div className="space-y-6">
+            {/* Header User Badge */}
+            <div className="flex items-center gap-3 px-2 pb-3 border-b border-white/5">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0 shadow-md ring-1 ring-white/10 overflow-hidden"
+                style={{
+                  background: avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:')) ? 'transparent' : selectedGradient,
+                }}
+              >
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                ) : (
+                  initials
+                )}
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-100 truncate">{displayName || user?.username}</h3>
+                <p className="text-[11px] text-emerald-400 font-mono flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Active Profile
+                </p>
+              </div>
+            </div>
+
+            {/* Nav Links */}
             <div>
-              <p className="text-[11px] font-bold text-[var(--color-text-muted)] uppercase tracking-wider px-3 mb-2">
-                User Settings
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-3 mb-2">
+                User Preferences
               </p>
-              <nav className="space-y-1">
-                <TabButton
+              <nav className="space-y-1.5">
+                <NavTabButton
                   active={activeTab === 'profile'}
                   onClick={() => setActiveTab('profile')}
-                  icon={<UserIcon size={17} />}
-                  label="My Account & Profile"
+                  icon={<UserIcon size={16} />}
+                  label="Profile & Identity"
                 />
-                <TabButton
+                <NavTabButton
                   active={activeTab === 'voice'}
                   onClick={() => setActiveTab('voice')}
-                  icon={<Mic size={17} />}
+                  icon={<Mic size={16} />}
                   label="Voice & Audio"
                 />
-                <TabButton
+                <NavTabButton
                   active={activeTab === 'notifications'}
                   onClick={() => setActiveTab('notifications')}
-                  icon={<Bell size={17} />}
+                  icon={<Bell size={16} />}
                   label="Notifications & Sounds"
                 />
-                <TabButton
+                <NavTabButton
                   active={activeTab === 'appearance'}
                   onClick={() => setActiveTab('appearance')}
-                  icon={<Palette size={17} />}
-                  label="Appearance"
+                  icon={<Palette size={16} />}
+                  label="Appearance & Theme"
                 />
               </nav>
             </div>
           </div>
 
           {/* Bottom Actions */}
-          <div className="pt-4 border-t border-[var(--color-border-default)] space-y-2">
+          <div className="pt-4 border-t border-white/10 space-y-1.5">
             <button
               onClick={resetToDefaults}
-              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] hover:bg-[var(--color-bg-hover)] transition-colors cursor-pointer"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-white/5 transition-all cursor-pointer"
             >
               <RotateCcw size={14} />
-              <span>Reset Preferences</span>
+              <span>Reset to Defaults</span>
             </button>
 
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium text-[#ed4245] hover:bg-[#ed4245]/15 transition-colors text-left cursor-pointer"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 transition-all cursor-pointer"
             >
-              <LogOut size={17} />
-              <span>Log Out</span>
+              <LogOut size={14} />
+              <span>Log Out Account</span>
             </button>
           </div>
         </div>
 
         {/* Right Content Area */}
-        <div className="flex-1 flex flex-col min-w-0 bg-[var(--color-bg-primary)] overflow-y-auto">
+        <div className="flex-1 flex flex-col min-w-0 bg-[#0c1017]/70 overflow-hidden">
           {/* Header */}
-          <div className="sticky top-0 z-10 flex items-center justify-between px-8 py-5 bg-[var(--color-bg-primary)]/90 backdrop-blur-md border-b border-[var(--color-border-default)]">
+          <div className="sticky top-0 z-10 flex items-center justify-between px-6 md:px-8 py-4 bg-[#0c1017]/90 backdrop-blur-xl border-b border-white/10">
             <div>
-              <h2 className="text-xl font-bold text-[var(--color-text-primary)]">
-                {activeTab === 'profile' && 'My Profile & Account'}
-                {activeTab === 'voice' && 'Voice & Audio Settings'}
-                {activeTab === 'notifications' && 'Notifications & Sound Alerts'}
-                {activeTab === 'appearance' && 'Appearance & Layout'}
+              <h2 className="text-lg md:text-xl font-extrabold text-slate-100 flex items-center gap-2.5">
+                {activeTab === 'profile' && (
+                  <>
+                    <UserIcon size={20} className="text-emerald-400" />
+                    <span>My Profile & Account</span>
+                  </>
+                )}
+                {activeTab === 'voice' && (
+                  <>
+                    <Mic size={20} className="text-emerald-400" />
+                    <span>Voice & Audio Processing</span>
+                  </>
+                )}
+                {activeTab === 'notifications' && (
+                  <>
+                    <Bell size={20} className="text-emerald-400" />
+                    <span>Notifications & Sound Alerts</span>
+                  </>
+                )}
+                {activeTab === 'appearance' && (
+                  <>
+                    <Palette size={20} className="text-emerald-400" />
+                    <span>Appearance & Layout</span>
+                  </>
+                )}
               </h2>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                {activeTab === 'profile' && 'Customize your identity and presentation across channels'}
-                {activeTab === 'voice' && 'Configure input devices, push-to-talk, and WebRTC audio processing'}
-                {activeTab === 'notifications' && 'Manage desktop notification alerts and sound feedback'}
-                {activeTab === 'appearance' && 'Personalize theme styles and chat message compactness'}
+              <p className="text-xs text-slate-400 mt-0.5">
+                {activeTab === 'profile' && 'Personalize your card banner, avatar, bio, and display name'}
+                {activeTab === 'voice' && 'Configure WebRTC noise suppression, devices, and push-to-talk keybinds'}
+                {activeTab === 'notifications' && 'Tune in-app sound feedback chimes and OS desktop alerts'}
+                {activeTab === 'appearance' && 'Customize theme modes and message density'}
               </p>
             </div>
 
@@ -447,31 +491,25 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
               className="flex flex-col items-center group cursor-pointer"
               title="Close Settings (ESC)"
             >
-              <div className="w-9 h-9 rounded-full border border-[var(--color-border-default)] flex items-center justify-center text-[var(--color-text-muted)] group-hover:text-white group-hover:bg-[var(--color-bg-hover)] transition-all">
-                <X size={18} />
+              <div className="w-8 h-8 rounded-full border border-white/10 flex items-center justify-center text-slate-400 group-hover:text-white group-hover:bg-white/10 transition-all">
+                <X size={16} />
               </div>
-              <span className="text-[10px] font-bold text-[var(--color-text-muted)] mt-1">ESC</span>
+              <span className="text-[9px] font-bold text-slate-500 mt-1">ESC</span>
             </button>
           </div>
 
           {/* Tab Body */}
-          <div className="p-8 max-w-2xl space-y-8">
+          <div className="flex-1 overflow-y-auto p-6 md:p-8 space-y-8">
             {/* ========================================================================= */}
             {/* TAB 1: Profile */}
             {/* ========================================================================= */}
             {activeTab === 'profile' && (
-              <div className="space-y-8">
-                {/* Profile Card Preview */}
-                <div
-                  className="rounded-2xl p-5 relative overflow-hidden shadow-lg"
-                  style={{
-                    background: 'var(--color-bg-secondary)',
-                    border: '1px solid var(--color-border-default)',
-                  }}
-                >
+              <div className="max-w-2xl space-y-7">
+                {/* Live Profile Card Preview */}
+                <div className="rounded-3xl p-5 relative overflow-hidden bg-[#090d14] border border-white/10 shadow-2xl">
                   {/* Header Banner */}
                   <div
-                    className="h-28 -m-5 mb-0 rounded-t-2xl relative overflow-hidden transition-all duration-300 flex items-center justify-center"
+                    className="h-32 -m-5 mb-0 rounded-t-3xl relative overflow-hidden transition-all duration-300 flex items-center justify-center"
                     style={{
                       background: bannerUrl && (bannerUrl.startsWith('http') || bannerUrl.startsWith('data:')) ? 'transparent' : (bannerUrl || selectedBannerGradient),
                     }}
@@ -483,14 +521,13 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                         className="w-full h-full object-cover"
                       />
                     ) : null}
-                    {/* Subtle bottom shadow overlay for contrast */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#090d14] via-transparent to-transparent opacity-80" />
                   </div>
 
                   {/* Avatar + Quick Badges */}
-                  <div className="relative -mt-12 flex items-end justify-between mb-3">
+                  <div className="relative -mt-14 flex items-end justify-between mb-3 px-1">
                     <div
-                      className="w-22 h-22 rounded-full ring-4 ring-[var(--color-bg-secondary)] flex items-center justify-center text-2xl font-bold text-white shadow-xl overflow-hidden transition-all duration-300 relative group"
+                      className="w-24 h-24 rounded-2xl ring-4 ring-[#090d14] flex items-center justify-center text-2xl font-bold text-white shadow-2xl overflow-hidden transition-all duration-300 relative group"
                       style={{
                         background: avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:')) ? 'transparent' : selectedGradient,
                       }}
@@ -501,15 +538,20 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                         initials
                       )}
                     </div>
+
+                    <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold">
+                      <Sparkles size={12} />
+                      <span>Live Preview</span>
+                    </div>
                   </div>
 
-                  <div>
-                    <h3 className="text-xl font-extrabold text-[var(--color-text-primary)]">
+                  <div className="px-1">
+                    <h3 className="text-xl font-black text-slate-100">
                       {displayName || user?.username || 'Username'}
                     </h3>
-                    <p className="text-xs text-[var(--color-text-muted)] font-mono">@{user?.username || 'username'}</p>
+                    <p className="text-xs text-slate-400 font-mono">@{user?.username || 'username'}</p>
                     {bio && (
-                      <p className="mt-3 text-sm text-[var(--color-text-secondary)] whitespace-pre-wrap leading-relaxed">
+                      <p className="mt-3 text-sm text-slate-300 whitespace-pre-wrap leading-relaxed bg-white/5 p-3 rounded-xl border border-white/5">
                         {bio}
                       </p>
                     )}
@@ -517,14 +559,14 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                 </div>
 
                 {/* Profile Banner Customization */}
-                <div className="p-4 rounded-xl space-y-3 bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                  <div className="flex items-center justify-between">
+                <div className="p-5 rounded-2xl space-y-4 bg-white/[0.03] border border-white/10">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h4 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                        <ImageIcon size={14} className="text-[var(--color-brand)]" />
-                        <span>Profile Banner (Static Image or Animated GIF)</span>
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <ImageIcon size={14} className="text-emerald-400" />
+                        <span>Profile Banner</span>
                       </h4>
-                      <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
+                      <p className="text-[11px] text-slate-400 mt-0.5">
                         Upload an image or animated GIF (up to 10MB)
                       </p>
                     </div>
@@ -541,7 +583,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                         type="button"
                         onClick={() => bannerFileInputRef.current?.click()}
                         disabled={isUploadingBanner}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[var(--color-brand)] hover:brightness-110 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
                       >
                         {isUploadingBanner ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
                         <span>{isUploadingBanner ? 'Uploading...' : 'Upload Banner'}</span>
@@ -554,7 +596,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                             setBannerUrl('')
                             setSelectedBannerGradient(BANNER_GRADIENT_PRESETS[0].bg)
                           }}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-bg-hover)] transition-all cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                         >
                           Clear
                         </button>
@@ -563,11 +605,11 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                   </div>
 
                   {/* Banner Gradient Presets */}
-                  <div className="pt-2">
-                    <label className="text-[11px] font-medium text-[var(--color-text-muted)] block mb-1.5">
+                  <div className="pt-2 border-t border-white/5">
+                    <label className="text-[11px] font-semibold text-slate-400 block mb-2">
                       Or Choose a Gradient Preset
                     </label>
-                    <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
                       {BANNER_GRADIENT_PRESETS.map((preset) => (
                         <button
                           key={preset.id}
@@ -577,15 +619,15 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                             setSelectedBannerGradient(preset.bg)
                           }}
                           title={preset.name}
-                          className={`w-12 h-6 rounded-md transition-all relative ${
+                          className={`h-9 rounded-xl transition-all relative overflow-hidden border ${
                             bannerUrl === preset.bg || selectedBannerGradient === preset.bg
-                              ? 'scale-105 ring-2 ring-white shadow-md'
-                              : 'hover:scale-105 opacity-80 hover:opacity-100'
+                              ? 'border-white ring-2 ring-emerald-400 shadow-lg scale-105'
+                              : 'border-white/10 opacity-75 hover:opacity-100 hover:scale-105'
                           }`}
                           style={{ background: preset.bg }}
                         >
                           {(bannerUrl === preset.bg || selectedBannerGradient === preset.bg) && (
-                            <Check size={12} className="text-white mx-auto drop-shadow-md" />
+                            <Check size={14} className="text-white mx-auto drop-shadow-md" />
                           )}
                         </button>
                       ))}
@@ -594,15 +636,15 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                 </div>
 
                 {/* Avatar Customization */}
-                <div className="p-4 rounded-xl space-y-3 bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                  <div className="flex items-center justify-between">
+                <div className="p-5 rounded-2xl space-y-4 bg-white/[0.03] border border-white/10">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div>
-                      <h4 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles size={14} className="text-[var(--color-brand)]" />
+                      <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles size={14} className="text-emerald-400" />
                         <span>User Avatar</span>
                       </h4>
-                      <p className="text-[11px] text-[var(--color-text-muted)] mt-0.5">
-                        Upload custom avatar (up to 10MB) or pick a preset gradient
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Upload custom avatar image or pick a gradient style
                       </p>
                     </div>
 
@@ -618,7 +660,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                         type="button"
                         onClick={() => avatarFileInputRef.current?.click()}
                         disabled={isUploadingAvatar}
-                        className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[var(--color-brand)] hover:brightness-110 flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
                       >
                         {isUploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
                         <span>{isUploadingAvatar ? 'Uploading...' : 'Upload Avatar'}</span>
@@ -628,7 +670,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                         <button
                           type="button"
                           onClick={() => setAvatarUrl('')}
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-bg-hover)] transition-all cursor-pointer"
+                          className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                         >
                           Clear
                         </button>
@@ -637,11 +679,11 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                   </div>
 
                   {/* Avatar Color Presets */}
-                  <div className="pt-2">
-                    <label className="text-[11px] font-medium text-[var(--color-text-muted)] block mb-1.5">
+                  <div className="pt-2 border-t border-white/5">
+                    <label className="text-[11px] font-semibold text-slate-400 block mb-2">
                       Avatar Gradient Presets
                     </label>
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-3">
                       {AVATAR_GRADIENT_PRESETS.map((preset) => (
                         <button
                           key={preset.id}
@@ -651,13 +693,15 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                             setSelectedGradient(preset.bg)
                           }}
                           title={preset.name}
-                          className={`w-8 h-8 rounded-full transition-transform duration-150 relative ${
-                            !avatarUrl && selectedGradient === preset.bg ? 'scale-110 ring-2 ring-white shadow-md' : 'hover:scale-105 opacity-80 hover:opacity-100'
+                          className={`w-9 h-9 rounded-xl transition-all relative border ${
+                            !avatarUrl && selectedGradient === preset.bg
+                              ? 'border-white ring-2 ring-emerald-400 shadow-lg scale-110'
+                              : 'border-white/10 opacity-75 hover:opacity-100 hover:scale-105'
                           }`}
                           style={{ background: preset.bg }}
                         >
                           {!avatarUrl && selectedGradient === preset.bg && (
-                            <Check size={13} className="text-white mx-auto drop-shadow-md" />
+                            <Check size={14} className="text-white mx-auto drop-shadow-md" />
                           )}
                         </button>
                       ))}
@@ -666,22 +710,22 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                 </div>
 
                 {/* Edit Form */}
-                <form onSubmit={handleSaveProfile} className="space-y-5">
+                <form onSubmit={handleSaveProfile} className="space-y-4">
                   {error && (
-                    <div className="p-3 rounded-lg bg-[#ed4245]/15 border border-[#ed4245]/30 text-sm text-[#ed4245]">
+                    <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300">
                       {error}
                     </div>
                   )}
 
                   {saveSuccess && (
-                    <div className="p-3 rounded-lg bg-[#23a559]/15 border border-[#23a559]/30 text-sm text-[#23a559] flex items-center gap-2">
-                      <Check size={16} />
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 flex items-center gap-2">
+                      <Check size={15} />
                       <span>Profile updated successfully!</span>
                     </div>
                   )}
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                       Display Name
                     </label>
                     <input
@@ -689,12 +733,12 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
                       placeholder="Enter how you appear to others"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand)] transition-colors"
+                      className="w-full px-4 py-3 rounded-xl text-sm bg-black/40 border border-white/10 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                       About Me / Bio
                     </label>
                     <textarea
@@ -702,10 +746,10 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       maxLength={190}
                       value={bio}
                       onChange={(e) => setBio(e.target.value)}
-                      placeholder="Tell the flock a little about yourself"
-                      className="w-full px-3.5 py-2.5 rounded-lg text-sm bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand)] transition-colors resize-none"
+                      placeholder="Tell your team a little about yourself"
+                      className="w-full px-4 py-3 rounded-xl text-sm bg-black/40 border border-white/10 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 transition-all resize-none"
                     />
-                    <p className="text-[11px] text-[var(--color-text-muted)] text-right">
+                    <p className="text-[11px] text-slate-400 text-right">
                       {bio.length} / 190 characters
                     </p>
                   </div>
@@ -714,9 +758,9 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white bg-[var(--color-brand)] hover:brightness-110 active:scale-95 transition-all shadow-md disabled:opacity-50 cursor-pointer"
+                      className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-98 transition-all shadow-[0_4px_20px_rgba(16,185,129,0.35)] disabled:opacity-50 cursor-pointer"
                     >
-                      {isSaving ? 'Saving...' : 'Save Profile Changes'}
+                      {isSaving ? 'Saving Changes...' : 'Save Profile Changes'}
                     </button>
                   </div>
                 </form>
@@ -727,18 +771,18 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
             {/* TAB 2: Voice & Audio */}
             {/* ========================================================================= */}
             {activeTab === 'voice' && (
-              <div className="space-y-8">
+              <div className="max-w-2xl space-y-7">
                 {/* Device Selectors */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                      <Mic size={14} className="text-[var(--color-brand)]" />
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Mic size={14} className="text-emerald-400" />
                       <span>Input Device (Microphone)</span>
                     </label>
                     <select
                       value={settings.inputDeviceId}
                       onChange={(e) => updateSettings({ inputDeviceId: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-lg text-sm bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand)]"
+                      className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-[#080c14] border border-white/10 text-slate-100 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
                     >
                       {audioInputDevices.length > 0 ? (
                         audioInputDevices.map((d, i) => (
@@ -753,14 +797,14 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider flex items-center gap-1.5">
-                      <Speaker size={14} className="text-[var(--color-brand)]" />
-                      <span>Output Device (Speakers)</span>
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Volume2 size={14} className="text-emerald-400" />
+                      <span>Output Device (Headphones)</span>
                     </label>
                     <select
                       value={settings.outputDeviceId}
                       onChange={(e) => updateSettings({ outputDeviceId: e.target.value })}
-                      className="w-full px-3 py-2.5 rounded-lg text-sm bg-[var(--color-bg-tertiary)] border border-[var(--color-border-default)] text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-brand)]"
+                      className="w-full px-3.5 py-2.5 rounded-xl text-sm bg-[#080c14] border border-white/10 text-slate-100 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/20 cursor-pointer"
                     >
                       {audioOutputDevices.length > 0 ? (
                         audioOutputDevices.map((d, i) => (
@@ -777,10 +821,10 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
                 {/* Input Volume & Output Volume */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-xl space-y-2 bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                    <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+                  <div className="p-4 rounded-2xl space-y-2 bg-white/[0.03] border border-white/10">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                       <span>Input Volume</span>
-                      <span className="text-[var(--color-brand)]">{settings.inputVolume}%</span>
+                      <span className="text-emerald-400 font-mono">{settings.inputVolume}%</span>
                     </div>
                     <input
                       type="range"
@@ -788,14 +832,14 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       max={100}
                       value={settings.inputVolume}
                       onChange={(e) => updateSettings({ inputVolume: Number(e.target.value) })}
-                      className="w-full accent-[var(--color-brand)] cursor-pointer"
+                      className="w-full accent-emerald-400 cursor-pointer"
                     />
                   </div>
 
-                  <div className="p-4 rounded-xl space-y-2 bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                    <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+                  <div className="p-4 rounded-2xl space-y-2 bg-white/[0.03] border border-white/10">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                       <span>Output Volume</span>
-                      <span className="text-[var(--color-brand)]">{settings.outputVolume}%</span>
+                      <span className="text-emerald-400 font-mono">{settings.outputVolume}%</span>
                     </div>
                     <input
                       type="range"
@@ -803,87 +847,93 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       max={200}
                       value={settings.outputVolume}
                       onChange={(e) => updateSettings({ outputVolume: Number(e.target.value) })}
-                      className="w-full accent-[var(--color-brand)] cursor-pointer"
+                      className="w-full accent-emerald-400 cursor-pointer"
                     />
                   </div>
                 </div>
 
                 {/* Input Mode: Voice Activity vs Push-to-Talk */}
                 <div className="space-y-3">
-                  <label className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                    Input Mode
+                  <label className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Transmission Mode
                   </label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => updateSettings({ inputMode: 'voice_activity' })}
-                      className={`p-3.5 rounded-xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         settings.inputMode === 'voice_activity'
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/15 ring-2 ring-[var(--color-brand)]'
-                          : 'border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]'
+                          ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-bold text-[var(--color-text-primary)]">Voice Activity</span>
-                        {settings.inputMode === 'voice_activity' && <Check size={16} className="text-[var(--color-brand)]" />}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                          <Radio size={16} className={settings.inputMode === 'voice_activity' ? 'text-emerald-400' : 'text-slate-400'} />
+                          Voice Activity
+                        </span>
+                        {settings.inputMode === 'voice_activity' && <Check size={16} className="text-emerald-400" />}
                       </div>
-                      <p className="text-xs text-[var(--color-text-muted)]">
-                        Transmits automatically when you speak
+                      <p className="text-xs text-slate-400">
+                        Transmits automatically when voice is detected
                       </p>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => updateSettings({ inputMode: 'push_to_talk' })}
-                      className={`p-3.5 rounded-xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         settings.inputMode === 'push_to_talk'
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/15 ring-2 ring-[var(--color-brand)]'
-                          : 'border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]'
+                          ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-bold text-[var(--color-text-primary)]">Push to Talk</span>
-                        {settings.inputMode === 'push_to_talk' && <Check size={16} className="text-[var(--color-brand)]" />}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                          <Keyboard size={16} className={settings.inputMode === 'push_to_talk' ? 'text-emerald-400' : 'text-slate-400'} />
+                          Push to Talk
+                        </span>
+                        {settings.inputMode === 'push_to_talk' && <Check size={16} className="text-emerald-400" />}
                       </div>
-                      <p className="text-xs text-[var(--color-text-muted)]">
-                        Hold shortcut key to transmit audio
+                      <p className="text-xs text-slate-400">
+                        Hold hotkey shortcut during calls to speak
                       </p>
                     </button>
                   </div>
 
                   {/* PTT Key Recorder */}
                   {settings.inputMode === 'push_to_talk' && (
-                    <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] flex items-center justify-between animate-fade-in">
+                    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between animate-fade-in">
                       <div>
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">Shortcut Keybind</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          Press and hold this key during calls to activate microphone
+                        <p className="text-sm font-semibold text-slate-200">Push-to-Talk Shortcut</p>
+                        <p className="text-xs text-slate-400">
+                          Hold this keybind while speaking in any voice channel
                         </p>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => setIsRecordingPTT(true)}
-                        className={`px-4 py-2 rounded-lg font-mono text-sm font-bold border transition-all ${
+                        className={`px-4 py-2 rounded-xl font-mono text-xs font-bold border transition-all cursor-pointer ${
                           isRecordingPTT
-                            ? 'bg-[#ed4245] text-white border-[#ed4245] animate-pulse'
-                            : 'bg-[var(--color-bg-tertiary)] text-[var(--color-brand)] border-[var(--color-border-default)] hover:border-[var(--color-brand)]'
+                            ? 'bg-rose-600 text-white border-rose-500 animate-pulse shadow-lg'
+                            : 'bg-black/50 text-emerald-400 border-emerald-500/30 hover:border-emerald-400'
                         }`}
                       >
                         <span className="flex items-center gap-2">
-                          <Keyboard size={15} />
+                          <Keyboard size={14} />
                           {isRecordingPTT ? 'Press any key...' : settings.pttKey || 'Space'}
                         </span>
                       </button>
                     </div>
                   )}
 
-                  {/* Voice Sensitivity Slider */}
+                  {/* Voice Sensitivity Threshold */}
                   {settings.inputMode === 'voice_activity' && (
-                    <div className="p-4 rounded-xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] space-y-2 animate-fade-in">
-                      <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
-                        <span>Voice Sensitivity Threshold</span>
-                        <span>{settings.vadSensitivity}%</span>
+                    <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/10 space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                        <span>Voice Gate Sensitivity</span>
+                        <span className="text-emerald-400 font-mono">{settings.vadSensitivity}%</span>
                       </div>
                       <input
                         type="range"
@@ -891,29 +941,23 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                         max={100}
                         value={settings.vadSensitivity}
                         onChange={(e) => updateSettings({ vadSensitivity: Number(e.target.value) })}
-                        className="w-full accent-[var(--color-parrot-green)] cursor-pointer"
+                        className="w-full accent-emerald-400 cursor-pointer"
                       />
                     </div>
                   )}
                 </div>
 
                 {/* Mic Test Visualizer */}
-                <div
-                  className="p-5 rounded-2xl space-y-4"
-                  style={{
-                    background: 'var(--color-bg-secondary)',
-                    border: '1px solid var(--color-border-default)',
-                  }}
-                >
+                <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[var(--color-brand)]/15 text-[var(--color-brand)] flex items-center justify-center shrink-0">
-                        <Mic size={20} />
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                        <Mic size={18} />
                       </div>
                       <div>
-                        <h4 className="text-base font-bold text-[var(--color-text-primary)]">Microphone Test</h4>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          Check input sensitivity and volume response in real-time
+                        <h4 className="text-sm font-bold text-slate-200">Microphone Input Test</h4>
+                        <p className="text-xs text-slate-400">
+                          Verify mic level and noise gate cutoff in real time
                         </p>
                       </div>
                     </div>
@@ -921,46 +965,46 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                     <button
                       type="button"
                       onClick={() => setIsTestingMic(!isTestingMic)}
-                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                      className={`px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-md ${
                         isTestingMic
-                          ? 'bg-[#ed4245] text-white hover:brightness-110'
-                          : 'bg-[var(--color-brand)] text-white hover:brightness-110'
+                          ? 'bg-rose-600 text-white hover:bg-rose-500'
+                          : 'bg-emerald-600 text-white hover:bg-emerald-500'
                       }`}
                     >
-                      {isTestingMic ? 'Stop Test' : 'Let’s Check'}
+                      {isTestingMic ? 'Stop Mic Test' : 'Test Microphone'}
                     </button>
                   </div>
 
-                  <div className="space-y-2 pt-2">
-                    <div className="flex items-center justify-between text-xs font-semibold text-[var(--color-text-secondary)]">
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                       <span>Input Level</span>
-                      <span className={micVolume >= settings.vadSensitivity ? 'text-[#23a559]' : 'text-[var(--color-text-muted)]'}>
-                        {micVolume}% {micVolume >= settings.vadSensitivity ? '• Transmitting' : '• Gated'}
+                      <span className={micVolume >= settings.vadSensitivity ? 'text-emerald-400' : 'text-slate-400'}>
+                        {micVolume}% {micVolume >= settings.vadSensitivity ? '• Transmitting' : '• Gate Closed'}
                       </span>
                     </div>
-                    {/* VU Meter with Threshold Needle */}
-                    <div className="relative h-4 rounded-full bg-[var(--color-bg-tertiary)] overflow-hidden p-0.5 border border-[var(--color-border-default)]">
-                      {/* Active volume bar */}
+
+                    {/* VU Meter */}
+                    <div className="relative h-3.5 rounded-full bg-black/60 overflow-hidden p-0.5 border border-white/10">
                       <div
                         className="h-full rounded-full transition-all duration-75"
                         style={{
                           width: `${micVolume}%`,
                           background:
                             micVolume >= settings.vadSensitivity
-                              ? 'linear-gradient(90deg, #23a559, #3ba55d)'
-                              : '#4e5058',
+                              ? 'linear-gradient(90deg, #10b981, #34d399)'
+                              : '#475569',
                         }}
                       />
-                      {/* Threshold Marker Indicator */}
                       <div
-                        className="absolute top-0 bottom-0 w-1 bg-[var(--color-brand)] z-10 shadow-sm"
+                        className="absolute top-0 bottom-0 w-1 bg-emerald-400 z-10 shadow-[0_0_8px_rgba(52,211,153,0.8)]"
                         style={{ left: `${settings.vadSensitivity}%` }}
-                        title={`Threshold: ${settings.vadSensitivity}%`}
+                        title={`Cutoff: ${settings.vadSensitivity}%`}
                       />
                     </div>
-                    <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted)]">
+
+                    <div className="flex items-center justify-between text-[10px] text-slate-400 font-mono">
                       <span>0% (Quiet)</span>
-                      <span className="text-[var(--color-brand)] font-medium">Cutoff: {settings.vadSensitivity}%</span>
+                      <span className="text-emerald-400 font-medium">Cutoff Threshold: {settings.vadSensitivity}%</span>
                       <span>100% (Loud)</span>
                     </div>
                   </div>
@@ -968,10 +1012,10 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
                 {/* WebRTC DSP Audio Processing Enhancements */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                    Voice Processing Enhancements
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Audio Processing Enhancements
                   </h4>
-                  <div className="p-4 rounded-xl space-y-4 bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
+                  <div className="p-4 rounded-2xl space-y-4 bg-white/[0.03] border border-white/10">
                     <SwitchItem
                       label="Echo Cancellation"
                       desc="Suppresses room reverberation and prevents speaker feedback loop"
@@ -981,7 +1025,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
                     <SwitchItem
                       label="Noise Suppression"
-                      desc="Filters background keyboard clicks, computer fans, and ambient hums"
+                      desc="Filters background keyboard clicks, computer fans, and room rumble"
                       checked={settings.noiseSuppression}
                       onChange={(checked) => updateSettings({ noiseSuppression: checked })}
                     />
@@ -1001,125 +1045,83 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
             {/* TAB 3: Notifications & Sounds */}
             {/* ========================================================================= */}
             {activeTab === 'notifications' && (
-              <div className="space-y-8">
+              <div className="max-w-2xl space-y-7">
                 {/* Desktop Notifications Permission Card */}
-                <div className="p-5 rounded-2xl bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)] space-y-4">
+                <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[var(--color-brand)]/15 text-[var(--color-brand)] flex items-center justify-center shrink-0">
-                        <Bell size={20} />
+                      <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0">
+                        <Bell size={18} />
                       </div>
                       <div>
-                        <h4 className="text-base font-bold text-[var(--color-text-primary)]">
+                        <h4 className="text-sm font-bold text-slate-100">
                           Desktop System Notifications
                         </h4>
-                        <p className="text-xs text-[var(--color-text-muted)]">
-                          Receive banner alerts on new messages when the app window is in background
+                        <p className="text-xs text-slate-400">
+                          Receive banner alerts on mentions and new direct messages
                         </p>
                       </div>
                     </div>
 
                     <span
-                      className={`text-xs px-2.5 py-1 rounded-full font-semibold ${
+                      className={`text-xs px-3 py-1 rounded-full font-bold uppercase tracking-wider ${
                         notificationPerm === 'granted'
-                          ? 'bg-[#23a559]/20 text-[#23a559]'
+                          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
                           : notificationPerm === 'denied'
-                          ? 'bg-[#ed4245]/20 text-[#ed4245]'
-                          : 'bg-[var(--color-bg-tertiary)] text-[var(--color-text-muted)]'
+                          ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                          : 'bg-white/5 text-slate-400 border border-white/10'
                       }`}
                     >
-                      {notificationPerm === 'granted' ? 'Allowed' : notificationPerm === 'denied' ? 'Blocked' : 'Not Configured'}
+                      {notificationPerm === 'granted' ? 'Allowed' : notificationPerm === 'denied' ? 'Blocked' : 'Default'}
                     </span>
                   </div>
 
-                  <div className="pt-2 flex items-center justify-between border-t border-[var(--color-border-default)]">
-                    <span className="text-xs text-[var(--color-text-secondary)]">
+                  <div className="pt-3 flex items-center justify-between border-t border-white/5">
+                    <span className="text-xs text-slate-400">
                       {notificationPerm === 'granted'
-                        ? 'System notifications are active and ready.'
-                        : 'Click below to grant OS notification permissions.'}
+                        ? 'Desktop push notifications are currently active.'
+                        : 'Grant browser/system permissions to receive desktop alerts.'}
                     </span>
 
                     <button
                       type="button"
                       onClick={handleRequestNotifications}
-                      className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-[var(--color-brand)] hover:brightness-110 active:scale-95 transition-all"
+                      className="px-4 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 transition-all cursor-pointer shadow-md"
                     >
-                      {notificationPerm === 'granted' ? 'Re-verify Permission' : 'Enable Notifications'}
+                      {notificationPerm === 'granted' ? 'Verify Permission' : 'Enable Notifications'}
                     </button>
                   </div>
                 </div>
 
                 {/* Sound Effects Controls */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                    In-App Audio Feedback & Chimes
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Sound Feedback & Chimes
                   </h4>
-                  <div className="p-4 rounded-xl space-y-4 bg-[var(--color-bg-secondary)] border border-[var(--color-border-default)]">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">New Message Sound</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">Plays a soft chime when a text message arrives</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => playSoundEffect('message')}
-                          className="px-2.5 py-1 rounded text-xs bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:text-white transition-colors"
-                        >
-                          Preview
-                        </button>
-                        <input
-                          type="checkbox"
-                          checked={settings.soundMessage}
-                          onChange={(e) => updateSettings({ soundMessage: e.target.checked })}
-                          className="w-4 h-4 accent-[var(--color-brand)] cursor-pointer"
-                        />
-                      </div>
-                    </div>
+                  <div className="p-4 rounded-2xl space-y-4 bg-white/[0.03] border border-white/10">
+                    <SoundItem
+                      title="New Message Chime"
+                      desc="Plays a soft alert tone on incoming channel chat messages"
+                      checked={settings.soundMessage}
+                      onToggle={(checked) => updateSettings({ soundMessage: checked })}
+                      onPreview={() => playSoundEffect('message')}
+                    />
 
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">Voice Channel Join / Leave</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">Plays a tone when users enter or exit voice channels</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => playSoundEffect('join')}
-                          className="px-2.5 py-1 rounded text-xs bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:text-white transition-colors"
-                        >
-                          Preview
-                        </button>
-                        <input
-                          type="checkbox"
-                          checked={settings.soundVoiceJoinLeave}
-                          onChange={(e) => updateSettings({ soundVoiceJoinLeave: e.target.checked })}
-                          className="w-4 h-4 accent-[var(--color-brand)] cursor-pointer"
-                        />
-                      </div>
-                    </div>
+                    <SoundItem
+                      title="Voice Channel Join / Leave"
+                      desc="Plays an audio cue when peers enter or exit voice channels"
+                      checked={settings.soundVoiceJoinLeave}
+                      onToggle={(checked) => updateSettings({ soundVoiceJoinLeave: checked })}
+                      onPreview={() => playSoundEffect('join')}
+                    />
 
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium text-[var(--color-text-primary)]">Mute & Deafen Toggles</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">Plays a confirmation click when toggling microphone or headphones</p>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          onClick={() => playSoundEffect('mute')}
-                          className="px-2.5 py-1 rounded text-xs bg-[var(--color-bg-tertiary)] text-[var(--color-text-secondary)] hover:text-white transition-colors"
-                        >
-                          Preview
-                        </button>
-                        <input
-                          type="checkbox"
-                          checked={settings.soundMuteToggle}
-                          onChange={(e) => updateSettings({ soundMuteToggle: e.target.checked })}
-                          className="w-4 h-4 accent-[var(--color-brand)] cursor-pointer"
-                        />
-                      </div>
-                    </div>
+                    <SoundItem
+                      title="Microphone & Deafen Feedback"
+                      desc="Plays audio confirmation when toggling mic or headset deafen"
+                      checked={settings.soundMuteToggle}
+                      onToggle={(checked) => updateSettings({ soundMuteToggle: checked })}
+                      onPreview={() => playSoundEffect('mute')}
+                    />
                   </div>
                 </div>
               </div>
@@ -1129,48 +1131,52 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
             {/* TAB 4: Appearance */}
             {/* ========================================================================= */}
             {activeTab === 'appearance' && (
-              <div className="space-y-8">
+              <div className="max-w-2xl space-y-7">
                 {/* Theme Selection */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
-                    Theme Selection
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                    Color Theme Mode
                   </h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button
                       type="button"
                       onClick={() => theme !== 'dark' && toggleTheme()}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         theme === 'dark'
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/15 ring-2 ring-[var(--color-brand)]'
-                          : 'border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]'
+                          ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <Moon size={20} className="text-[#f0b232]" />
-                        {theme === 'dark' && <Check size={16} className="text-[var(--color-brand)]" />}
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                          <Moon size={18} />
+                        </div>
+                        {theme === 'dark' && <Check size={16} className="text-emerald-400" />}
                       </div>
-                      <h5 className="font-bold text-sm text-[var(--color-text-primary)]">Dark Mode</h5>
-                      <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                        Sleek, deep charcoal interface optimized for long gaming sessions
+                      <h5 className="font-bold text-sm text-slate-100">Midnight Dark Mode</h5>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Deep glassmorphic dark theme tailored for high focus
                       </p>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => theme !== 'light' && toggleTheme()}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         theme === 'light'
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/15 ring-2 ring-[var(--color-brand)]'
-                          : 'border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]'
+                          ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                       }`}
                     >
-                      <div className="flex items-center justify-between mb-3">
-                        <Sun size={20} className="text-[#f0b232]" />
-                        {theme === 'light' && <Check size={16} className="text-[var(--color-brand)]" />}
+                      <div className="flex items-center justify-between mb-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-400 flex items-center justify-center">
+                          <Sun size={18} />
+                        </div>
+                        {theme === 'light' && <Check size={16} className="text-emerald-400" />}
                       </div>
-                      <h5 className="font-bold text-sm text-[var(--color-text-primary)]">Light Mode</h5>
-                      <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                        Clean and bright presentation for high ambient light readability
+                      <h5 className="font-bold text-sm text-slate-100">Clean Light Mode</h5>
+                      <p className="text-xs text-slate-400 mt-1">
+                        High ambient daylight theme for clear visibility
                       </p>
                     </button>
                   </div>
@@ -1178,43 +1184,43 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
                 {/* Chat Message Layout Density */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+                  <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
                     Message Display Density
                   </h4>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <button
                       type="button"
                       onClick={() => updateSettings({ chatDisplayMode: 'cozy' })}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         settings.chatDisplayMode === 'cozy'
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/15 ring-2 ring-[var(--color-brand)]'
-                          : 'border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]'
+                          ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-sm text-[var(--color-text-primary)]">Cozy Mode</span>
-                        {settings.chatDisplayMode === 'cozy' && <Check size={16} className="text-[var(--color-brand)]" />}
+                        <span className="font-bold text-sm text-slate-100">Cozy Modern Mode</span>
+                        {settings.chatDisplayMode === 'cozy' && <Check size={16} className="text-emerald-400" />}
                       </div>
-                      <p className="text-xs text-[var(--color-text-muted)]">
-                        Modern spacious design with prominent user avatars and clear separation
+                      <p className="text-xs text-slate-400">
+                        Roomy spacing with prominent avatars and clean card breaks
                       </p>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => updateSettings({ chatDisplayMode: 'compact' })}
-                      className={`p-4 rounded-2xl border text-left transition-all ${
+                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer ${
                         settings.chatDisplayMode === 'compact'
-                          ? 'border-[var(--color-brand)] bg-[var(--color-brand)]/15 ring-2 ring-[var(--color-brand)]'
-                          : 'border-[var(--color-border-default)] bg-[var(--color-bg-secondary)] hover:border-[var(--color-text-muted)]'
+                          ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/40 shadow-lg'
+                          : 'border-white/10 bg-white/[0.03] hover:border-white/20'
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <span className="font-bold text-sm text-[var(--color-text-primary)]">Compact Mode</span>
-                        {settings.chatDisplayMode === 'compact' && <Check size={16} className="text-[var(--color-brand)]" />}
+                        <span className="font-bold text-sm text-slate-100">Compact Stream Mode</span>
+                        {settings.chatDisplayMode === 'compact' && <Check size={16} className="text-emerald-400" />}
                       </div>
-                      <p className="text-xs text-[var(--color-text-muted)]">
-                        High-density single-line layout fitting more messages on screen
+                      <p className="text-xs text-slate-400">
+                        High-density single-line layout fitting maximum messages
                       </p>
                     </button>
                   </div>
@@ -1228,7 +1234,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   )
 }
 
-function TabButton({
+function NavTabButton({
   active,
   onClick,
   icon,
@@ -1242,10 +1248,10 @@ function TabButton({
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left cursor-pointer ${
+      className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-left cursor-pointer ${
         active
-          ? 'bg-[var(--color-brand)] text-white shadow-sm'
-          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
+          ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_15px_rgba(16,185,129,0.15)]'
+          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent'
       }`}
     >
       {icon}
@@ -1266,17 +1272,61 @@ function SwitchItem({
   onChange: (checked: boolean) => void
 }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between gap-4">
       <div>
-        <p className="text-sm font-medium text-[var(--color-text-primary)]">{label}</p>
-        <p className="text-xs text-[var(--color-text-muted)]">{desc}</p>
+        <p className="text-sm font-semibold text-slate-200">{label}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
       </div>
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="w-4 h-4 accent-[var(--color-brand)] cursor-pointer"
-      />
+      <label className="relative inline-flex items-center cursor-pointer shrink-0">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="sr-only peer"
+        />
+        <div className="w-11 h-6 bg-black/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all border border-white/10 peer-checked:bg-emerald-600 peer-checked:border-emerald-500"></div>
+      </label>
+    </div>
+  )
+}
+
+function SoundItem({
+  title,
+  desc,
+  checked,
+  onToggle,
+  onPreview,
+}: {
+  title: string
+  desc: string
+  checked: boolean
+  onToggle: (checked: boolean) => void
+  onPreview: () => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-semibold text-slate-200">{title}</p>
+        <p className="text-xs text-slate-400 mt-0.5">{desc}</p>
+      </div>
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={onPreview}
+          className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-white/5 text-slate-300 hover:text-white hover:bg-white/10 border border-white/5 transition-all cursor-pointer"
+        >
+          Preview
+        </button>
+        <label className="relative inline-flex items-center cursor-pointer shrink-0">
+          <input
+            type="checkbox"
+            checked={checked}
+            onChange={(e) => onToggle(e.target.checked)}
+            className="sr-only peer"
+          />
+          <div className="w-11 h-6 bg-black/60 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all border border-white/10 peer-checked:bg-emerald-600 peer-checked:border-emerald-500"></div>
+        </label>
+      </div>
     </div>
   )
 }
