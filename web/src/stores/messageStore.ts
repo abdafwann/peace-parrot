@@ -71,6 +71,9 @@ export const useMessageStore = create<MessageState>((set) => ({
     set((state) => {
       const newMessages = new Map(state.messages)
       const channelMessages = newMessages.get(channelId) ?? []
+      if (channelMessages.some((m) => m.id === message.id)) {
+        return state
+      }
       newMessages.set(channelId, [...channelMessages, message])
       return { messages: newMessages }
     }),

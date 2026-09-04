@@ -3,8 +3,8 @@
 *.dll
 *.so
 *.dylib
-server
-peace-parrot
+/server
+/peace-parrot
 
 # Test binary
 *.test
