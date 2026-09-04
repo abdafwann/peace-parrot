@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { useAuthStore } from './authStore'
+import { API_BASE_URL } from '../utils/config'
 
 export interface ServerSettings {
   id: string
@@ -32,6 +33,7 @@ export interface BanInfo {
   username: string
   avatarUrl?: string
   bannedBy: string
+  reason?: string
   createdAt: string
 }
 
@@ -59,7 +61,7 @@ interface ServerState {
   deleteRole: (id: string) => Promise<boolean>
 }
 
-export const useServerStore = create<ServerState>((set, get) => ({
+export const useServerStore = create<ServerState>((set) => ({
   settings: {
     id: 'default',
     name: 'PeaceParrot Lounge',
@@ -77,7 +79,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   fetchRoles: async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/server/roles')
+      const res = await fetch(`${API_BASE_URL}/api/server/roles`)
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
@@ -92,7 +94,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   createRole: async (name: string, color: string, iconUrl: string, permissions: number) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch('http://localhost:8080/api/server/roles', {
+      const res = await fetch(`${API_BASE_URL}/api/server/roles`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -114,7 +116,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   updateRole: async (id: string, name: string, color: string, iconUrl: string, permissions: number) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/roles/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/roles/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -141,7 +143,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
       const formData = new FormData()
       formData.append('icon', file)
 
-      const res = await fetch(`http://localhost:8080/api/server/roles/${id}/icon`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/roles/${id}/icon`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -165,7 +167,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   deleteRole: async (id: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/roles/${id}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/roles/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -181,7 +183,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
 
   fetchSettings: async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/server')
+      const res = await fetch(`${API_BASE_URL}/api/server`)
       if (res.ok) {
         const data = await res.json()
         set({ settings: data })
@@ -195,26 +197,28 @@ export const useServerStore = create<ServerState>((set, get) => ({
     set({ isLoading: true, error: null })
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch('http://localhost:8080/api/server', {
+      const res = await fetch(`${API_BASE_URL}/api/server`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ name, description, slowModeSeconds }),
+        body: JSON.stringify({
+          name,
+          description,
+          slowModeSeconds,
+        }),
       })
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        set({ error: errData.error || 'Failed to update server settings', isLoading: false })
-        return false
+      if (res.ok) {
+        const data = await res.json()
+        set({ settings: data, isLoading: false })
+        return true
       }
-
-      const updated = await res.json()
-      set({ settings: updated, isLoading: false })
-      return true
+      set({ error: 'Failed to update settings', isLoading: false })
+      return false
     } catch (err: any) {
-      set({ error: err.message || 'Network error', isLoading: false })
+      set({ error: err.message, isLoading: false })
       return false
     }
   },
@@ -226,7 +230,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
       const formData = new FormData()
       formData.append('icon', file)
 
-      const res = await fetch('http://localhost:8080/api/server/icon', {
+      const res = await fetch(`${API_BASE_URL}/api/server/icon`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -234,17 +238,18 @@ export const useServerStore = create<ServerState>((set, get) => ({
         body: formData,
       })
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}))
-        set({ error: errData.error || 'Failed to upload server icon', isLoading: false })
-        return false
+      if (res.ok) {
+        const data = await res.json()
+        set((state) => ({
+          settings: state.settings ? { ...state.settings, iconUrl: data.iconUrl } : null,
+          isLoading: false,
+        }))
+        return true
       }
-
-      const updated = await res.json()
-      set({ settings: updated, isLoading: false })
-      return true
+      set({ error: 'Failed to upload icon', isLoading: false })
+      return false
     } catch (err: any) {
-      set({ error: err.message || 'Network error', isLoading: false })
+      set({ error: err.message, isLoading: false })
       return false
     }
   },
@@ -252,12 +257,12 @@ export const useServerStore = create<ServerState>((set, get) => ({
   fetchBans: async () => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch('http://localhost:8080/api/server/bans', {
+      const res = await fetch(`${API_BASE_URL}/api/server/bans`, {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
         const data = await res.json()
-        set({ bans: Array.isArray(data) ? data : [] })
+        set({ bans: data || [] })
       }
     } catch (err) {
       console.error('[ServerStore] Failed to fetch bans:', err)
@@ -267,15 +272,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
   banUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/bans/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/bans/${userId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) {
-        get().fetchBans()
-        return true
-      }
-      return false
+      return res.ok
     } catch {
       return false
     }
@@ -284,17 +285,11 @@ export const useServerStore = create<ServerState>((set, get) => ({
   unbanUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/bans/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/bans/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) {
-        set((state) => ({
-          bans: state.bans.filter((b) => b.userId !== userId),
-        }))
-        return true
-      }
-      return false
+      return res.ok
     } catch {
       return false
     }
@@ -303,7 +298,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   kickUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/kicks/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/kicks/${userId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -316,7 +311,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   muteUser: async (userId: string, durationMinutes: number) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/mutes/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/mutes/${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -333,7 +328,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   unmuteUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/mutes/${userId}`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/mutes/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -346,7 +341,7 @@ export const useServerStore = create<ServerState>((set, get) => ({
   updateMemberRole: async (userId: string, role: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`http://localhost:8080/api/server/members/${userId}/role`, {
+      const res = await fetch(`${API_BASE_URL}/api/server/members/${userId}/role`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

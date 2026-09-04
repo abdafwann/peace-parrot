@@ -50,3 +50,11 @@ web/dist/
 *.bak
 .claude/
 web/.claude/
+.agents/
+web/.agents/
+web/skills-lock.json
+
+# Internal Documentation & Planning
+plans/
+docs/
+

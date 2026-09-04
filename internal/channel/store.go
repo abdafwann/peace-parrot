@@ -175,3 +175,35 @@ func (s *Store) DeleteChannel(id string) error {
 
 	return nil
 }
+
+// ChannelPositionItem represents an ID and new position pair
+type ChannelPositionItem struct {
+	ID       string `json:"id"`
+	Position int    `json:"position"`
+}
+
+// ReorderChannels updates multiple channels' positions atomically
+func (s *Store) ReorderChannels(items []ChannelPositionItem) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	query := `UPDATE channels SET position = ?, updated_at = ? WHERE id = ?`
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	now := time.Now()
+	for _, item := range items {
+		if _, err := stmt.Exec(item.Position, now, item.ID); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+

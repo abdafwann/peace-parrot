@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useAuthStore } from '../stores/authStore'
+import { API_BASE_URL } from '../utils/config'
 import {
   LogIn,
   UserPlus,
@@ -34,7 +35,7 @@ export function LoginForm({ onSuccess }: AuthFormProps) {
     setLoading(true)
 
     try {
-      const res = await fetch('http://localhost:8080/api/auth/login', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
@@ -168,7 +169,7 @@ export function RegisterForm({ onSuccess, initialInviteCode = '' }: AuthFormProp
     const timer = setTimeout(async () => {
       setValidatingInvite(true)
       try {
-        const res = await fetch(`http://localhost:8080/api/invites/validate/${encodeURIComponent(clean)}`)
+        const res = await fetch(`${API_BASE_URL}/api/invites/validate/${encodeURIComponent(clean)}`)
         if (res.ok) {
           setInviteStatus('valid')
         } else {
@@ -190,7 +191,7 @@ export function RegisterForm({ onSuccess, initialInviteCode = '' }: AuthFormProp
     setLoading(true)
 
     try {
-      const res = await fetch('http://localhost:8080/api/auth/register', {
+      const res = await fetch(`${API_BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

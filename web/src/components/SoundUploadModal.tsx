@@ -3,6 +3,7 @@ import { X, Play, Pause, Upload, Loader2 } from 'lucide-react'
 import { decodeAudioFile, sliceAndEncodeWav } from '../utils/audioTrimmer'
 import { SoundboardItem } from '../utils/soundboardAudio'
 import { toast } from '../stores/toastStore'
+import { API_BASE_URL } from '../utils/config'
 
 interface SoundUploadModalProps {
   isOpen: boolean
@@ -295,7 +296,7 @@ export function SoundUploadModal({
         formData.append('file', slicedFile)
         const token = localStorage.getItem('token') || ''
 
-        const res = await fetch('http://localhost:8080/api/upload', {
+        const res = await fetch(`${API_BASE_URL}/api/upload`, {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
