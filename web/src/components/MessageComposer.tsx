@@ -140,33 +140,37 @@ export function MessageComposer() {
     setMessage('')
     setAttachments([])
 
-    // Send message via WebSocket
-    send({
-      type: 'message',
-      channelId: activeChannelId,
-      payload: {
-        channelId: activeChannelId,
-        id: tempId,
-        content: messageToSend,
-        attachments: currentAttachments,
-      },
-    })
+    const wsConnected = useWebSocketStore.getState().isConnected
 
-    // Also persist via REST API for fallback / reliability
-    try {
-      await fetch(`${API_BASE_URL}/api/channels/${activeChannelId}/messages`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
+    if (wsConnected) {
+      // Send message via WebSocket
+      send({
+        type: 'message',
+        channelId: activeChannelId,
+        payload: {
+          channelId: activeChannelId,
+          id: tempId,
           content: messageToSend,
           attachments: currentAttachments,
-        }),
+        },
       })
-    } catch {
-      // Ignored if WS dispatched
+    } else {
+      // Fallback only if WebSocket is disconnected
+      try {
+        await fetch(`${API_BASE_URL}/api/channels/${activeChannelId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            content: messageToSend,
+            attachments: currentAttachments,
+          }),
+        })
+      } catch (err: any) {
+        toast.error(err.message || 'Failed to send message')
+      }
     }
 
     setSending(false)

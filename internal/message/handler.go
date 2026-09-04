@@ -109,10 +109,22 @@ func (h *Handler) Create(c echo.Context) error {
 		attachments = []Attachment{}
 	}
 
-	// TODO: Get author ID from JWT middleware
+	// Extract author ID from JWT middleware if present
+	var authorID string
+	if id, ok := c.Get("userId").(string); ok && id != "" {
+		authorID = id
+	} else if id, ok := c.Get("user_id").(string); ok && id != "" {
+		authorID = id
+	} else if id, ok := c.Get("userID").(string); ok && id != "" {
+		authorID = id
+	}
+	if authorID == "" {
+		authorID = "system"
+	}
+
 	msg := &Message{
 		ChannelID:   channelID,
-		AuthorID:    "system", // TODO: Get from JWT
+		AuthorID:    authorID,
 		Content:     req.Content,
 		Attachments: attachments,
 	}
@@ -121,13 +133,20 @@ func (h *Handler) Create(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create message", nil)
 	}
 
+	// Fetch created message with joined author details
+	if created, err := h.store.GetMessageByID(msg.ID); err == nil && created != nil {
+		msg = created
+	}
+
 	return c.JSON(http.StatusCreated, MessageResponse{
-		ID:          msg.ID,
-		ChannelID:   msg.ChannelID,
-		AuthorID:    msg.AuthorID,
-		Content:     msg.Content,
-		Attachments: attachments,
-		CreatedAt:   msg.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
+		ID:              msg.ID,
+		ChannelID:       msg.ChannelID,
+		AuthorID:        msg.AuthorID,
+		AuthorName:      msg.AuthorName,
+		AuthorAvatarURL: msg.AuthorAvatarURL,
+		Content:         msg.Content,
+		Attachments:     attachments,
+		CreatedAt:       msg.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
 	})
 }
 
@@ -238,19 +257,29 @@ func trimAndValidate(content string) string {
 
 // CreateMessage creates a message (used by WebSocket handler)
 func (h *Handler) CreateMessage(channelID, authorID, content string) (*Message, error) {
+	return h.CreateMessageWithAttachments(channelID, authorID, content, nil)
+}
+
+// CreateMessageWithAttachments creates a message with attachments for WebSocket/service handlers
+func (h *Handler) CreateMessageWithAttachments(channelID, authorID, content string, attachments []Attachment) (*Message, error) {
 	// Validate
 	content = trimAndValidate(content)
-	if content == "" {
-		return nil, fmt.Errorf("message content is required")
+	if content == "" && len(attachments) == 0 {
+		return nil, fmt.Errorf("message content or attachment is required")
 	}
 	if len(content) > MaxMessageLength {
 		return nil, fmt.Errorf("message exceeds maximum length of %d characters", MaxMessageLength)
 	}
 
+	if attachments == nil {
+		attachments = []Attachment{}
+	}
+
 	msg := &Message{
-		ChannelID: channelID,
-		AuthorID:  authorID,
-		Content:   content,
+		ChannelID:   channelID,
+		AuthorID:    authorID,
+		Content:     content,
+		Attachments: attachments,
 	}
 
 	if err := h.store.CreateMessage(msg); err != nil {

@@ -82,9 +82,36 @@ export function MemberList() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
 
-  // Initial fetch for roles
+  // Reusable function to fetch users list from backend
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/users`)
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data) && data.length > 0) {
+          setRawUsers(data)
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch members:', err)
+    }
+  }
+
+  // Initial fetch for roles & users
   useEffect(() => {
     fetchRoles()
+    fetchUsers()
+  }, [currentUser])
+
+  // Periodic polling & focus listener to ensure member list is always 100% updated in real-time
+  useEffect(() => {
+    const interval = setInterval(fetchUsers, 5000)
+    const handleFocus = () => fetchUsers()
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('focus', handleFocus)
+    }
   }, [])
 
   // Listen for real-time WebSocket presence & role updates
@@ -95,6 +122,7 @@ export function MemberList() {
         if (Array.isArray(payload.onlineUserIds)) {
           setOnlineUserIds(new Set(payload.onlineUserIds.map((id) => id.toLowerCase())))
         }
+        fetchUsers()
       } else if (msg.type === 'user_presence') {
         const payload = (msg.payload || {}) as { userId?: string; username?: string; status?: string }
         if (payload.userId) {
@@ -111,32 +139,15 @@ export function MemberList() {
             }
             return next
           })
+          fetchUsers()
         }
-      } else if (msg.type === 'user_role_updated') {
-        const payload = (msg.payload || {}) as { userId?: string; role?: string }
-        if (payload.userId && payload.role) {
-          setRawUsers((prev) =>
-            prev.map((u) => (u.id === payload.userId ? { ...u, role: payload.role } : u))
-          )
-        }
+      } else if (msg.type === 'user_role_updated' || msg.type === 'role_created' || msg.type === 'role_updated' || msg.type === 'role_deleted') {
+        fetchRoles()
+        fetchUsers()
       }
     })
     return () => unsubscribe()
   }, [subscribe])
-
-  // Fetch registered users from API
-  useEffect(() => {
-    fetch(`${API_BASE_URL}/api/users`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (Array.isArray(data) && data.length > 0) {
-          setRawUsers(data)
-        }
-      })
-      .catch((err) => {
-        console.error('Failed to fetch members:', err)
-      })
-  }, [currentUser])
 
   // Calculate live members list based on real-time presence
   const members = useMemo<Member[]>(() => {

@@ -91,9 +91,8 @@ export function MessageList() {
 
   const [lightboxImage, setLightboxImage] = useState<{ url: string; filename?: string } | null>(null)
 
-  // Fetch roles and registered users map on mount
-  useEffect(() => {
-    fetchRoles()
+  // Fetch roles and registered users map
+  const fetchUsers = () => {
     fetch(`${API_BASE_URL}/api/users`)
       .then((r) => r.json())
       .then((list) => {
@@ -107,6 +106,11 @@ export function MessageList() {
         }
       })
       .catch(() => {})
+  }
+
+  useEffect(() => {
+    fetchRoles()
+    fetchUsers()
   }, [])
 
   // Subscribe to channel when active channel changes
@@ -126,21 +130,30 @@ export function MessageList() {
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
-          const normalized: Message[] = data.map((item: any) => ({
-            id: item.id,
-            channelId: item.channelId || item.channel_id,
-            authorId: item.authorId || item.author_id,
-            authorName: item.authorName || item.author_name,
-            authorAvatarUrl: item.authorAvatarUrl || item.author_avatar_url,
-            content: item.content,
-            attachments: item.attachments || [],
-            createdAt: item.createdAt || item.created_at || new Date().toISOString(),
-            editedAt: item.editedAt || item.edited_at,
-            deletedAt: item.deletedAt || item.deleted_at,
-            reactions: item.reactions || [],
-          }))
-          // Reverse so oldest messages are at the top and newest at the bottom
-          setMessages(normalized.reverse())
+          const normalized: Message[] = data.map((item: any) => {
+            const authorObj = item.authorId ? usersMap[item.authorId] : undefined
+            return {
+              id: item.id,
+              channelId: item.channelId || item.channel_id,
+              authorId: item.authorId || item.author_id,
+              authorName: item.authorName || item.author_name || authorObj?.displayName || authorObj?.username,
+              authorAvatarUrl: item.authorAvatarUrl || item.author_avatar_url || authorObj?.avatarUrl,
+              content: item.content,
+              attachments: item.attachments || [],
+              createdAt: item.createdAt || item.created_at || new Date().toISOString(),
+              editedAt: item.editedAt || item.edited_at,
+              deletedAt: item.deletedAt || item.deleted_at,
+              reactions: item.reactions || [],
+            }
+          })
+          // Filter out any duplicates and reverse so oldest messages are at top
+          const seen = new Set<string>()
+          const unique = normalized.filter((m) => {
+            if (seen.has(m.id)) return false
+            seen.add(m.id)
+            return true
+          })
+          setMessages(unique.reverse())
         } else {
           setMessages([])
         }
@@ -150,12 +163,16 @@ export function MessageList() {
         console.error(err)
         setLoading(false)
       })
-  }, [activeChannelId])
+  }, [activeChannelId, usersMap])
 
   // Subscribe to WebSocket messages
   useEffect(() => {
     const unsubscribe = subscribe((message: WSMessage) => {
       console.log('[MessageList] WS event:', message.type, 'payload:', message.payload)
+
+      if (message.type === 'presence_sync' || message.type === 'user_presence' || message.type === 'user_role_updated') {
+        fetchUsers()
+      }
 
       if (message.type === 'message') {
         const payload = (message.payload || {}) as Record<string, any>
@@ -164,8 +181,9 @@ export function MessageList() {
         const channelId = (payload.channelId || message.channelId || nested?.channelId) as string
         const id = (nested?.id || payload.id) as string
         const authorId = (nested?.authorId || payload.authorId) as string
-        const authorName = (nested?.authorName || payload.authorName) as string | undefined
-        const authorAvatarUrl = (nested?.authorAvatarUrl || payload.authorAvatarUrl || nested?.author_avatar_url || payload.author_avatar_url) as string | undefined
+        const authorObj = authorId ? usersMap[authorId] : undefined
+        const authorName = (nested?.authorName || payload.authorName || authorObj?.displayName || authorObj?.username) as string | undefined
+        const authorAvatarUrl = (nested?.authorAvatarUrl || payload.authorAvatarUrl || nested?.author_avatar_url || payload.author_avatar_url || authorObj?.avatarUrl) as string | undefined
         const content = (nested?.content || payload.content) as string
         const attachments = (nested?.attachments || payload.attachments || []) as Attachment[]
         const createdAt = (nested?.createdAt || payload.createdAt || new Date().toISOString()) as string
@@ -190,6 +208,10 @@ export function MessageList() {
           }
           setMessages((prev) => {
             if (prev.some((m) => m.id === id)) return prev
+            // Also deduplicate identical author/content in close timeframe
+            if (prev.some((m) => m.channelId === channelId && m.authorId === authorId && m.content === content && Math.abs(new Date(m.createdAt).getTime() - new Date(createdAt).getTime()) < 1500)) {
+              return prev
+            }
             return [...prev, newMessage]
           })
         }
