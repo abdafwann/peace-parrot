@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -205,8 +207,21 @@ func main() {
 
 	// Serve frontend SPA web assets if present
 	if _, err := os.Stat("web/dist"); err == nil {
-		e.Static("/", "web/dist")
-		e.File("/*", "web/dist/index.html")
+		e.Static("/assets", "web/dist/assets")
+		e.GET("/*", func(c echo.Context) error {
+			path := c.Request().URL.Path
+			// Do not intercept API, WebSocket, or Uploads endpoints
+			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/ws") || strings.HasPrefix(path, "/uploads") {
+				return echo.ErrNotFound
+			}
+			// If physical file exists in web/dist, serve it (e.g. favicon, manifest, etc.)
+			filePath := filepath.Join("web/dist", filepath.Clean(path))
+			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+				return c.File(filePath)
+			}
+			// Otherwise fallback to index.html for SPA client-side routing
+			return c.File("web/dist/index.html")
+		})
 	}
 
 	// Start server
