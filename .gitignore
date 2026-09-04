@@ -42,6 +42,8 @@ web/.vite/
 # Tauri
 web/src-tauri/target/
 web/node_modules/
+*.key
+web/src-tauri/*.key
 
 # Uploaded media
 uploads/
