@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Hash, Volume2, ChevronDown, Plus, MicOff, HeadphoneOff } from 'lucide-react'
+import { Hash, Volume2, ChevronDown, Plus, MicOff, HeadphoneOff, Radio } from 'lucide-react'
 import { useChannelStore, type Channel } from '../stores/channelStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useAuthStore } from '../stores/authStore'
@@ -25,13 +25,13 @@ export function ChannelList() {
   const voiceChannels = channels.filter((c) => c.type === 'voice')
 
   return (
-    <div className="flex-1 overflow-y-auto py-2 px-2">
+    <div className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
       {/* Text Channels Section */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between px-2 mb-1 group">
+      <div>
+        <div className="flex items-center justify-between px-2 mb-1.5 group">
           <div className="flex items-center gap-1">
-            <ChevronDown size={12} className="text-[var(--color-text-muted)]" />
-            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+            <ChevronDown size={12} className="text-slate-400" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Text Channels
             </span>
           </div>
@@ -41,7 +41,7 @@ export function ChannelList() {
                 setModalInitialType('text')
                 setShowCreateModal(true)
               }}
-              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] cursor-pointer p-0.5 rounded hover:bg-[var(--color-bg-hover)] transition-colors"
+              className="text-slate-400 hover:text-emerald-400 cursor-pointer p-0.5 rounded hover:bg-white/5 transition-colors"
               title="Create Text Channel"
             >
               <Plus size={14} />
@@ -55,21 +55,21 @@ export function ChannelList() {
               channel={channel}
               isActive={channel.id === activeChannelId}
               onClick={() => setActiveChannel(channel.id)}
-              icon={<Hash size={18} className="shrink-0 text-[var(--color-text-muted)]" />}
+              icon={<Hash size={17} className="shrink-0" />}
             />
           ))}
           {textChannels.length === 0 && (
-            <p className="px-2 py-1 text-xs text-[var(--color-text-muted)]">No text channels</p>
+            <p className="px-2 py-1 text-xs text-slate-400">No text channels</p>
           )}
         </div>
       </div>
 
       {/* Voice Channels Section */}
-      <div className="mb-4">
-        <div className="flex items-center justify-between px-2 mb-1 group">
+      <div>
+        <div className="flex items-center justify-between px-2 mb-1.5 group">
           <div className="flex items-center gap-1">
-            <ChevronDown size={12} className="text-[var(--color-text-muted)]" />
-            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider">
+            <ChevronDown size={12} className="text-slate-400" />
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
               Voice Channels
             </span>
           </div>
@@ -79,7 +79,7 @@ export function ChannelList() {
                 setModalInitialType('voice')
                 setShowCreateModal(true)
               }}
-              className="text-[var(--color-text-muted)] hover:text-[var(--color-text-primary)] cursor-pointer p-0.5 rounded hover:bg-[var(--color-bg-hover)] transition-colors"
+              className="text-slate-400 hover:text-emerald-400 cursor-pointer p-0.5 rounded hover:bg-white/5 transition-colors"
               title="Create Voice Channel"
             >
               <Plus size={14} />
@@ -96,7 +96,7 @@ export function ChannelList() {
             />
           ))}
           {voiceChannels.length === 0 && (
-            <p className="px-2 py-1 text-xs text-[var(--color-text-muted)]">No voice channels</p>
+            <p className="px-2 py-1 text-xs text-slate-400">No voice channels</p>
           )}
         </div>
       </div>
@@ -123,18 +123,21 @@ function ChannelItem({ channel, isActive, onClick, icon }: ChannelItemProps) {
     <button
       onClick={onClick}
       className={`
-        w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm cursor-pointer
-        transition-all duration-150 group text-left
+        w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium cursor-pointer
+        transition-all duration-150 group text-left relative
         ${isActive
-          ? 'bg-[var(--color-brand)] text-white shadow-md'
-          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
+          ? 'bg-emerald-500/15 text-emerald-300 font-semibold shadow-sm border border-emerald-500/20'
+          : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
         }
       `}
     >
-      <span className="shrink-0 text-[var(--color-text-muted)] group-hover:text-[var(--color-text-primary)] transition-colors">
+      <span className={`shrink-0 transition-colors ${isActive ? 'text-emerald-400' : 'text-slate-400 group-hover:text-slate-300'}`}>
         {icon}
       </span>
-      <span className="truncate font-medium flex-1 text-left">{channel.name}</span>
+      <span className="truncate flex-1 text-left">{channel.name}</span>
+      {isActive && (
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0 shadow-sm shadow-emerald-400/50" />
+      )}
     </button>
   )
 }
@@ -156,7 +159,6 @@ function VoiceChannelItem({ channel, isActive }: VoiceChannelItemProps) {
   const user = useAuthStore((state) => state.user)
 
   const isInThisChannel = isInVoice && currentChannelId === channel.id
-  // Filter participants in this channel (or fallback if channelId matches)
   const channelParticipants = Array.from(participants.entries()).filter(
     ([_, p]) => !p.channelId || p.channelId === channel.id
   )
@@ -167,7 +169,6 @@ function VoiceChannelItem({ channel, isActive }: VoiceChannelItemProps) {
       setChannelId(channel.id)
       setIsConnected(true)
 
-      // Send WebSocket voice_join event with current mute/deafen states
       useWebSocketStore.getState().send({
         type: 'voice_join',
         channelId: channel.id,
@@ -182,40 +183,40 @@ function VoiceChannelItem({ channel, isActive }: VoiceChannelItemProps) {
 
   return (
     <div className="space-y-0.5">
-      {/* Channel row - clicking anywhere joins or selects voice channel */}
+      {/* Channel row */}
       <button
         onClick={handleChannelClick}
         className={`
-          w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-sm
+          w-full flex items-center gap-2 px-2.5 py-1.5 rounded-xl text-xs font-medium
           transition-all duration-150 group cursor-pointer text-left
-          ${isActive || isInThisChannel
-            ? 'bg-[var(--color-brand)] text-white shadow-md'
-            : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-bg-hover)] hover:text-[var(--color-text-primary)]'
+          ${isInThisChannel
+            ? 'bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/20 shadow-sm'
+            : isActive
+            ? 'bg-white/[0.06] text-white'
+            : 'text-slate-400 hover:bg-white/[0.04] hover:text-slate-200'
           }
         `}
       >
-        {/* Voice channel icon or activity indicator */}
         {isInThisChannel ? (
-          <span className="w-[18px] h-[18px] flex items-center justify-center shrink-0">
-            <span className="w-2 h-2 rounded-full bg-[#23a559] animate-pulse" />
+          <span className="w-4 h-4 flex items-center justify-center shrink-0 text-emerald-400">
+            <Radio size={15} className="animate-pulse" />
           </span>
         ) : (
-          <Volume2 size={18} className="shrink-0 text-[var(--color-text-muted)] group-hover:text-[var(--color-text-primary)]" />
+          <Volume2 size={16} className="shrink-0 text-slate-400 group-hover:text-slate-300" />
         )}
 
-        <span className="truncate font-medium flex-1 text-left">{channel.name}</span>
+        <span className="truncate flex-1 text-left">{channel.name}</span>
 
-        {/* Participant count when any users are in this channel */}
         {participantCount > 0 && (
-          <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/20 font-medium shrink-0">
+          <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-500/20 text-emerald-300 font-mono font-bold shrink-0 border border-emerald-500/30">
             {participantCount}
           </span>
         )}
       </button>
 
-      {/* Expanded participants section - show whenever there are participants in this channel */}
+      {/* Expanded participants section */}
       {channelParticipants.length > 0 && (
-        <div className="ml-4 mt-1 space-y-1">
+        <div className="ml-3 pl-2 border-l border-white/5 space-y-1 my-1">
           {channelParticipants.map(([userId, participant]) => {
             const isSelf =
               userId === 'local' ||
@@ -232,17 +233,16 @@ function VoiceChannelItem({ channel, isActive }: VoiceChannelItemProps) {
             return (
               <div
                 key={userId}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-md text-sm transition-colors hover:bg-[var(--color-bg-hover)]"
-                style={{ background: 'var(--color-bg-tertiary)' }}
+                className="flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors bg-white/[0.02] hover:bg-white/[0.05]"
               >
                 {/* Avatar */}
                 <div className="relative shrink-0">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold text-white transition-all overflow-hidden ${
-                      participant.isSpeaking ? 'ring-2 ring-[#23a559]' : ''
+                    className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold text-white transition-all overflow-hidden ${
+                      participant.isSpeaking ? 'ring-2 ring-emerald-400 ring-offset-1 ring-offset-[#0d121d]' : ''
                     }`}
                     style={{
-                      background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))',
+                      background: avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--color-brand), #0ea5e9)',
                     }}
                   >
                     {avatarUrl ? (
@@ -253,27 +253,27 @@ function VoiceChannelItem({ channel, isActive }: VoiceChannelItemProps) {
                   </div>
                   {/* Status dot */}
                   <div
-                    className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full ring-1 ring-[var(--color-bg-secondary)] ${
-                      isDeafened || isMuted ? 'bg-[#ed4245]' : 'bg-[#23a559]'
+                    className={`absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+                      isDeafened || isMuted ? 'bg-rose-500' : 'bg-emerald-500'
                     }`}
                   />
                 </div>
 
                 {/* Username */}
-                <span className="flex-1 text-sm text-[var(--color-text-primary)] truncate font-medium">
+                <span className="flex-1 text-xs text-slate-300 truncate font-medium">
                   {displayName}
                 </span>
 
-                {/* Status indicators (Mute & Deafen shown separately or together) */}
-                <div className="flex items-center gap-1 shrink-0">
+                {/* Status indicators */}
+                <div className="flex items-center gap-1 shrink-0 text-slate-400">
                   {isMuted && (
-                    <span title="Muted" className="text-[#ed4245]">
-                      <MicOff size={14} />
+                    <span title="Muted" className="text-rose-400">
+                      <MicOff size={13} />
                     </span>
                   )}
                   {isDeafened && (
-                    <span title="Deafened" className="text-[#ed4245]">
-                      <HeadphoneOff size={14} />
+                    <span title="Deafened" className="text-rose-400">
+                      <HeadphoneOff size={13} />
                     </span>
                   )}
                 </div>

@@ -227,24 +227,18 @@ export function MemberList() {
   const offlineMembers = filteredMembers.filter((m) => m.status === 'offline')
 
   return (
-    <aside
-      className="w-[240px] flex flex-col shrink-0 h-full select-none"
-      style={{
-        background: 'var(--color-bg-secondary)',
-        borderLeft: '1px solid var(--color-border-default)',
-      }}
-    >
+    <aside className="w-[240px] flex flex-col shrink-0 h-full select-none bg-[#0d121d]/80 border-l border-white/5">
       {/* Search Header */}
-      <div className="p-3 shrink-0" style={{ borderBottom: '1px solid var(--color-border-default)' }}>
+      <div className="h-14 px-3 flex items-center justify-between shrink-0 border-b border-white/5">
         {showSearch ? (
-          <div className="relative">
-            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)]" />
+          <div className="relative w-full">
+            <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search members..."
-              className="w-full bg-[var(--color-bg-tertiary)] text-xs text-[var(--color-text-primary)] placeholder-[var(--color-text-muted)] rounded-lg pl-8 pr-7 py-1.5 focus:outline-none border border-[var(--color-border-default)]"
+              className="w-full bg-white/[0.04] text-xs text-slate-200 placeholder-slate-500 rounded-xl pl-8 pr-7 py-1.5 focus:outline-none border border-white/10 focus:border-emerald-500/40"
               autoFocus
             />
             <button
@@ -252,19 +246,19 @@ export function MemberList() {
                 setSearchQuery('')
                 setShowSearch(false)
               }}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-white text-xs"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white text-xs cursor-pointer"
             >
               ✕
             </button>
           </div>
         ) : (
-          <div className="flex items-center justify-between">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-[var(--color-text-muted)]">
+          <div className="flex items-center justify-between w-full">
+            <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
               Members — {members.length}
             </h3>
             <button
               onClick={() => setShowSearch(true)}
-              className="p-1 rounded text-[var(--color-text-muted)] hover:text-white hover:bg-[var(--color-bg-hover)] transition-colors"
+              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
               title="Search members"
             >
               <Search size={14} />

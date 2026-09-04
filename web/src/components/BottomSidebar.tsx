@@ -6,15 +6,12 @@ import {
   Video,
   VideoOff,
   ScreenShare,
-  Gamepad2,
   Mic,
   MicOff,
   Headphones,
   HeadphoneOff,
   Settings,
-  ChevronDown,
   Volume2,
-  Moon,
   Music,
 } from 'lucide-react'
 import { useVoiceStore } from '../stores/voiceStore'
@@ -42,7 +39,6 @@ export function BottomSidebar() {
   const setIsScreenSharing = useVoiceStore((state) => state.setIsScreenSharing)
 
   const [isVideoOn, setIsVideoOn] = useState(false)
-
   const { leaveChannel } = useVoiceCleanup()
 
   const user = useAuthStore((state) => state.user)
@@ -67,7 +63,6 @@ export function BottomSidebar() {
           const isSelf = Boolean(payload.userId && payload.userId === currentUserId)
           const soundboardVol = useSettingsStore.getState().soundboardVolume ?? 80
 
-          // Only play audio if this was broadcast from another user AND soundboard isn't muted
           if (!isSelf && soundboardVol > 0) {
             playSoundboardEffect(payload.soundId, payload.soundUrl)
             toast.info(
@@ -76,7 +71,6 @@ export function BottomSidebar() {
             )
           }
 
-          // Trigger green speaking indicator ring on user's avatar while sound plays
           if (senderId) {
             useVoiceStore.getState().setParticipantSpeaking(senderId, true)
             if (isSelf) {
@@ -133,125 +127,95 @@ export function BottomSidebar() {
   }
 
   return (
-    <div
-      className="shrink-0 flex flex-col"
-      style={{
-        background: 'var(--color-bg-tertiary)',
-        borderTop: '1px solid var(--color-border-default)',
-      }}
-    >
-      {/* Voice Connected Widget (only rendered when connected to a voice channel) */}
+    <div className="shrink-0 flex flex-col bg-[#0a0e17] border-t border-white/5 select-none">
+      {/* Voice Connected Panel (when user is in a voice channel) */}
       {isInVoice && (
-        <div
-          className="p-2 flex flex-col gap-2 animate-fade-in"
-          style={{
-            borderBottom: '1px solid var(--color-border-default)',
-            background: 'var(--color-bg-secondary)',
-          }}
-        >
+        <div className="p-2.5 flex flex-col gap-2 animate-fade-in bg-emerald-950/20 border-b border-emerald-500/20">
           {/* Header Row: Voice Connected & Disconnect */}
-          <div className="flex items-center justify-between gap-1 px-1">
-            {/* Left: Signal Icon & Channel Info */}
+          <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                style={{ background: 'rgba(35, 165, 89, 0.15)', color: '#23a559' }}
-              >
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 bg-emerald-500/15 text-emerald-400">
                 <Radio size={15} className="animate-pulse" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-semibold text-[#23a559] leading-none hover:underline cursor-pointer">
+                <div className="text-xs font-semibold text-emerald-400 leading-tight">
                   Voice Connected
                 </div>
-                <div className="text-[11px] text-[var(--color-text-muted)] truncate flex items-center gap-1 mt-1 leading-none">
-                  <span className="text-[10px] shrink-0">🔊</span>
-                  <span className="truncate">
-                    {voiceChannel?.name || 'Voice Chat'} / PeaceParrot
-                  </span>
+                <div className="text-[10px] text-slate-400 truncate flex items-center gap-1 mt-0.5 leading-none">
+                  <span className="truncate">{voiceChannel?.name || 'Voice Channel'}</span>
                 </div>
               </div>
             </div>
 
-            {/* Right: RTC & Disconnect button */}
+            {/* RTC Signal & Disconnect button */}
             <div className="flex items-center gap-1 shrink-0">
-              <button
-                className="p-1 rounded text-[var(--color-text-muted)] hover:text-[#23a559] transition-colors"
-                title="RTC Connected / 18ms (PeaceParrot WebRTC)"
-              >
-                <Activity size={16} className="text-[#23a559]" />
-              </button>
+              <div className="p-1 text-emerald-400" title="WebRTC SFU Connected (Low Latency)">
+                <Activity size={15} />
+              </div>
               <button
                 onClick={leaveChannel}
-                className="p-1.5 rounded-md text-[var(--color-text-muted)] hover:text-[#ed4245] hover:bg-[#ed4245]/15 transition-all active:scale-95"
-                title="Disconnect"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-rose-500/15 transition-all active:scale-95 cursor-pointer"
+                title="Disconnect from Voice"
               >
-                <PhoneOff size={16} />
+                <PhoneOff size={15} />
               </button>
             </div>
           </div>
 
-          {/* Quick Action Buttons Row (Camera, Screen Share, Activities, Soundboard) */}
-          <div className="grid grid-cols-4 gap-1.5 pt-0.5">
-            {/* 1. Camera button */}
+          {/* Quick Actions Row */}
+          <div className="grid grid-cols-3 gap-1.5 pt-0.5">
             <button
               onClick={() => setIsVideoOn(!isVideoOn)}
-              className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer ${
+              className={`h-7 rounded-lg flex items-center justify-center text-xs font-medium gap-1.5 transition-all active:scale-95 cursor-pointer ${
                 isVideoOn
-                  ? 'bg-[#23a559] text-white shadow-sm'
-                  : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white'
+                  ? 'bg-emerald-500 text-black shadow-sm font-semibold'
+                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300'
               }`}
               title={isVideoOn ? 'Turn off Camera' : 'Turn on Camera'}
             >
-              {isVideoOn ? <Video size={17} /> : <VideoOff size={17} />}
+              {isVideoOn ? <Video size={14} /> : <VideoOff size={14} />}
+              <span>Video</span>
             </button>
 
-            {/* 2. Screen Share button */}
             <button
               onClick={() => setIsScreenSharing(!isScreenSharing)}
-              className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer ${
+              className={`h-7 rounded-lg flex items-center justify-center text-xs font-medium gap-1.5 transition-all active:scale-95 cursor-pointer ${
                 isScreenSharing
-                  ? 'bg-[#23a559] text-white shadow-sm'
-                  : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white'
+                  ? 'bg-emerald-500 text-black shadow-sm font-semibold'
+                  : 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300'
               }`}
-              title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Your Screen'}
+              title={isScreenSharing ? 'Stop Sharing Screen' : 'Share Screen'}
             >
-              <ScreenShare size={17} />
+              <ScreenShare size={14} />
+              <span>Share</span>
             </button>
 
-            {/* 3. Activities / Apps button */}
-            <button
-              className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95 cursor-pointer"
-              title="Start Activity"
-            >
-              <Gamepad2 size={17} />
-            </button>
-
-            {/* 4. Soundboard button */}
             <button
               onClick={() => setIsSoundboardOpen(true)}
-              className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95 cursor-pointer"
+              className="h-7 rounded-lg flex items-center justify-center text-xs font-medium gap-1.5 bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 hover:text-amber-300 transition-all active:scale-95 cursor-pointer"
               title="Open Soundboard"
             >
-              <Music size={17} />
+              <Music size={14} className="text-amber-400" />
+              <span>SFX</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* User Profile Bar (Always visible at bottom) */}
-      <div className="h-[52px] px-2 flex items-center justify-between gap-1 shrink-0">
-        {/* Left: User Avatar & Name */}
+      {/* User Profile & Audio Controls Bar */}
+      <div className="h-14 px-2.5 flex items-center justify-between gap-1.5 shrink-0">
+        {/* User Info */}
         <div
           onClick={() => setIsSettingsOpen(true)}
-          className="flex items-center gap-2 min-w-0 flex-1 px-1 py-1 rounded-md hover:bg-[var(--color-bg-hover)] cursor-pointer transition-colors group"
+          className="flex items-center gap-2.5 min-w-0 flex-1 p-1 rounded-xl hover:bg-white/[0.04] cursor-pointer transition-colors group"
           title="Open User Settings"
         >
-          {/* Avatar with Status badge */}
+          {/* Avatar with Status indicator */}
           <div className="relative shrink-0">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shadow-sm transition-transform group-hover:scale-105 overflow-hidden"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm transition-transform group-hover:scale-105 overflow-hidden ring-1 ring-white/10"
               style={{
-                background: user?.avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))',
+                background: user?.avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--color-brand), #0ea5e9)',
               }}
             >
               {user?.avatarUrl ? (
@@ -260,89 +224,72 @@ export function BottomSidebar() {
                 (user?.displayName || user?.username || 'U')[0].toUpperCase()
               )}
             </div>
-            {/* Status dot / moon indicator */}
-            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[var(--color-bg-tertiary)] flex items-center justify-center">
-              {isInVoice ? (
-                <div className="w-2.5 h-2.5 rounded-full bg-[#23a559]" />
-              ) : (
-                <Moon size={9} className="text-[#f0b232] fill-[#f0b232]" />
-              )}
+            {/* Online Status Dot */}
+            <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-[#0a0e17] flex items-center justify-center">
+              <div className="w-2 h-2 rounded-full bg-emerald-400" />
             </div>
           </div>
 
-          {/* Username & Status */}
+          {/* User Details */}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[var(--color-text-primary)] truncate leading-tight group-hover:text-white">
+            <p className="text-xs font-semibold text-slate-100 truncate leading-tight group-hover:text-emerald-300 transition-colors">
               {user?.displayName || user?.username || 'User'}
             </p>
             {isInVoice ? (
-              <p className="text-[11px] text-[#23a559] flex items-center gap-1 font-medium leading-none mt-0.5">
-                <Volume2 size={11} className="shrink-0 animate-pulse" />
-                <span>In voice</span>
+              <p className="text-[10px] text-emerald-400 flex items-center gap-1 font-medium leading-none mt-0.5">
+                <Volume2 size={10} className="shrink-0 animate-pulse" />
+                <span>In Voice</span>
               </p>
             ) : (
-              <p className="text-[11px] text-[var(--color-text-muted)] truncate leading-none mt-0.5">
-                Online
+              <p className="text-[10px] text-slate-400 truncate leading-none mt-0.5">
+                @{user?.username || 'username'}
               </p>
             )}
           </div>
         </div>
 
-        {/* Right: Quick User Controls (Mic, Headset, Settings) */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {/* Mute toggle button with dropdown arrow */}
-          <div className="flex items-center">
-            <button
-              onClick={handleToggleMute}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                selfMuted
-                  ? 'text-[#ed4245] hover:bg-[#ed4245]/15'
-                  : 'text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)]'
-              }`}
-              title={selfMuted ? 'Unmute' : 'Mute'}
-            >
-              {selfMuted ? <MicOff size={18} /> : <Mic size={18} />}
-            </button>
-            <ChevronDown size={10} className="text-[var(--color-text-muted)] -ml-0.5 cursor-pointer opacity-70 hover:opacity-100" />
-          </div>
+        {/* Audio Toggles & Settings Gear */}
+        <div className="flex items-center gap-0.5 shrink-0 text-slate-400">
+          <button
+            onClick={handleToggleMute}
+            className={`p-2 rounded-xl transition-all active:scale-95 cursor-pointer ${
+              selfMuted
+                ? 'text-rose-400 bg-rose-500/15 hover:bg-rose-500/25'
+                : 'hover:text-slate-100 hover:bg-white/[0.06]'
+            }`}
+            title={selfMuted ? 'Unmute Microphone' : 'Mute Microphone'}
+          >
+            {selfMuted ? <MicOff size={16} /> : <Mic size={16} />}
+          </button>
 
-          {/* Deafen toggle button with dropdown arrow */}
-          <div className="flex items-center">
-            <button
-              onClick={handleToggleDeafen}
-              className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                selfDeafened
-                  ? 'text-[#ed4245] hover:bg-[#ed4245]/15'
-                  : 'text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)]'
-              }`}
-              title={selfDeafened ? 'Undeafen' : 'Deafen'}
-            >
-              {selfDeafened ? <HeadphoneOff size={18} /> : <Headphones size={18} />}
-            </button>
-            <ChevronDown size={10} className="text-[var(--color-text-muted)] -ml-0.5 cursor-pointer opacity-70 hover:opacity-100" />
-          </div>
+          <button
+            onClick={handleToggleDeafen}
+            className={`p-2 rounded-xl transition-all active:scale-95 cursor-pointer ${
+              selfDeafened
+                ? 'text-rose-400 bg-rose-500/15 hover:bg-rose-500/25'
+                : 'hover:text-slate-100 hover:bg-white/[0.06]'
+            }`}
+            title={selfDeafened ? 'Undeafen Headphones' : 'Deafen Headphones'}
+          >
+            {selfDeafened ? <HeadphoneOff size={16} /> : <Headphones size={16} />}
+          </button>
 
-          {/* Settings button */}
           <button
             onClick={() => setIsSettingsOpen(true)}
-            className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)] transition-colors group cursor-pointer"
+            className="p-2 rounded-xl hover:text-slate-100 hover:bg-white/[0.06] transition-all group active:scale-95 cursor-pointer"
             title="User Settings"
           >
-            <Settings
-              size={18}
-              className="group-hover:rotate-45 transition-transform duration-300"
-            />
+            <Settings size={16} className="group-hover:rotate-45 transition-transform duration-300" />
           </button>
         </div>
       </div>
 
-      {/* User Settings Modal */}
+      {/* Modals */}
       <UserSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
       />
 
-      {/* Soundboard Modal */}
       <SoundboardModal
         isOpen={isSoundboardOpen}
         onClose={() => setIsSoundboardOpen(false)}
