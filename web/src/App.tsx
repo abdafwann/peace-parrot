@@ -303,6 +303,7 @@ function ChatPage() {
 }
 
 import { ToastContainer } from './components/ToastContainer'
+import { UpdateModal } from './components/UpdateModal'
 
 export default function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
@@ -311,6 +312,7 @@ export default function App() {
   return (
     <>
       <ToastContainer />
+      <UpdateModal />
       {!isAuthenticated ? (
         <AuthPage mode={authMode} onSwitch={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} />
       ) : (

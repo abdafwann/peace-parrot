@@ -36,6 +36,8 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+.vite/
+web/.vite/
 
 # Tauri
 web/src-tauri/target/
