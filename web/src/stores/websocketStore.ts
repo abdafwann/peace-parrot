@@ -76,7 +76,9 @@ interface WebSocketState {
   stopTyping: (channelId: string) => void
 }
 
-const WS_URL = 'ws://localhost:8080/ws'
+import { WS_BASE_URL } from '../utils/config'
+
+const WS_URL = WS_BASE_URL
 const RECONNECT_DELAY = 3000
 
 export const useWebSocketStore = create<WebSocketState>()(

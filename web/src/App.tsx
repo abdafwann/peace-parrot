@@ -9,6 +9,7 @@ import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocketStore, setTokenGetter } from './stores/websocketStore'
 import { useSFU } from './hooks/useSFU'
+import { API_BASE_URL } from './utils/config'
 import { useState, useEffect } from 'react'
 import { Sun, Moon, Bird } from 'lucide-react'
 
@@ -179,7 +180,7 @@ function ChatPage() {
   // Fetch and refresh current user profile on mount
   useEffect(() => {
     if (token) {
-      fetch('http://localhost:8080/api/users/me', {
+      fetch(`${API_BASE_URL}/api/users/me`, {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => {
@@ -201,7 +202,7 @@ function ChatPage() {
 
   // Fetch channels on mount
   useEffect(() => {
-    fetch('http://localhost:8080/api/channels')
+    fetch(`${API_BASE_URL}/api/channels`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {

@@ -3,6 +3,7 @@ import { useChannelStore } from '../stores/channelStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useAuthStore } from '../stores/authStore'
 import { toast } from '../stores/toastStore'
+import { API_BASE_URL } from '../utils/config'
 import {
   Send,
   Paperclip,
@@ -89,7 +90,7 @@ export function MessageComposer() {
       formData.append('file', file)
 
       try {
-        const res = await fetch('http://localhost:8080/api/upload', {
+        const res = await fetch(`${API_BASE_URL}/api/upload`, {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
@@ -153,7 +154,7 @@ export function MessageComposer() {
 
     // Also persist via REST API for fallback / reliability
     try {
-      await fetch(`http://localhost:8080/api/channels/${activeChannelId}/messages`, {
+      await fetch(`${API_BASE_URL}/api/channels/${activeChannelId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

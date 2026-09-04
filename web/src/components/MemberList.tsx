@@ -5,6 +5,7 @@ import { useVoiceStore } from '../stores/voiceStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useServerStore } from '../stores/serverStore'
 import { RoleBadge } from './RoleBadge'
+import { API_BASE_URL } from '../utils/config'
 
 export interface Member {
   id: string
@@ -125,7 +126,7 @@ export function MemberList() {
 
   // Fetch registered users from API
   useEffect(() => {
-    fetch('http://localhost:8080/api/users')
+    fetch(`${API_BASE_URL}/api/users`)
       .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {

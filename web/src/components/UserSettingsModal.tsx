@@ -25,6 +25,7 @@ import {
   playSoundEffect,
   requestDesktopNotificationPermission,
 } from '../utils/soundEffects'
+import { API_BASE_URL } from '../utils/config'
 
 interface UserSettingsModalProps {
   isOpen: boolean
@@ -239,7 +240,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       const formData = new FormData()
       formData.append('file', file)
 
-      const res = await fetch('http://localhost:8080/api/users/me/avatar', {
+      const res = await fetch(`${API_BASE_URL}/api/users/me/avatar`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -280,7 +281,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       const formData = new FormData()
       formData.append('file', file)
 
-      const res = await fetch('http://localhost:8080/api/users/me/banner', {
+      const res = await fetch(`${API_BASE_URL}/api/users/me/banner`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -313,7 +314,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
     setSaveSuccess(false)
 
     try {
-      const res = await fetch('http://localhost:8080/api/users/me', {
+      const res = await fetch(`${API_BASE_URL}/api/users/me`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

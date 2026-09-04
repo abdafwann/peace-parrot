@@ -26,6 +26,7 @@ import { CreateChannelModal } from './CreateChannelModal'
 import { RoleBadge } from './RoleBadge'
 import { ConfirmModal } from './ConfirmModal'
 import { toast } from '../stores/toastStore'
+import { API_BASE_URL } from '../utils/config'
 
 interface ServerSettingsModalProps {
   isOpen: boolean
@@ -152,7 +153,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
 
   const fetchMembers = async () => {
     try {
-      const res = await fetch('http://localhost:8080/api/users')
+      const res = await fetch(`${API_BASE_URL}/api/users`)
       if (res.ok) {
         const data = await res.json()
         setMembersList(Array.isArray(data) ? data : [])
@@ -223,7 +224,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
       isDanger: true,
       onConfirm: async () => {
         try {
-          const res = await fetch(`http://localhost:8080/api/channels/${channelId}`, {
+          const res = await fetch(`${API_BASE_URL}/api/channels/${channelId}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` },
           })

@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { API_BASE_URL } from '../utils/config'
 
 export interface Channel {
   id: string
@@ -66,7 +67,7 @@ export const useChannelStore = create<ChannelState>((set) => ({
         position: ch.position,
       }))
 
-      const res = await fetch('http://localhost:8080/api/channels/reorder', {
+      const res = await fetch(`${API_BASE_URL}/api/channels/reorder`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -78,7 +79,7 @@ export const useChannelStore = create<ChannelState>((set) => ({
       if (!res.ok) {
         // Fallback to individual PATCH if reorder endpoint is unreachable
         for (const item of payload) {
-          await fetch(`http://localhost:8080/api/channels/${item.id}`, {
+          await fetch(`${API_BASE_URL}/api/channels/${item.id}`, {
             method: 'PATCH',
             headers: {
               'Content-Type': 'application/json',

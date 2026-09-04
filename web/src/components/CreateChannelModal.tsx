@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Hash, Volume2, X, AlertCircle } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useChannelStore } from '../stores/channelStore'
+import { API_BASE_URL } from '../utils/config'
 
 interface CreateChannelModalProps {
   isOpen: boolean
@@ -40,7 +41,7 @@ export function CreateChannelModal({ isOpen, onClose, initialType = 'text' }: Cr
     setError(null)
 
     try {
-      const res = await fetch('http://localhost:8080/api/channels', {
+      const res = await fetch(`${API_BASE_URL}/api/channels`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -63,7 +64,7 @@ export function CreateChannelModal({ isOpen, onClose, initialType = 'text' }: Cr
       const newChannel = await res.json()
 
       // Refresh channels from API
-      const resList = await fetch('http://localhost:8080/api/channels')
+      const resList = await fetch(`${API_BASE_URL}/api/channels`)
       if (resList.ok) {
         const list = await resList.json()
         if (Array.isArray(list)) useChannelStore.getState().setChannels(list)
