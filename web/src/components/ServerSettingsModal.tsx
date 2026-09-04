@@ -18,6 +18,8 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
+  Ticket,
+  Copy,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useServerStore } from '../stores/serverStore'
@@ -33,13 +35,19 @@ interface ServerSettingsModalProps {
   onClose: () => void
 }
 
-type TabType = 'overview' | 'channels' | 'roles' | 'members' | 'bans'
+type TabType = 'overview' | 'channels' | 'roles' | 'members' | 'bans' | 'invites'
 
 export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const [draggedChannelId, setDraggedChannelId] = useState<string | null>(null)
   const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
+
+  // Invites tab state
+  const [invitesList, setInvitesList] = useState<any[]>([])
+  const [inviteDuration, setInviteDuration] = useState<number>(0)
+  const [isCreatingInvite, setIsCreatingInvite] = useState(false)
+  const [copiedCode, setCopiedCode] = useState<string | null>(null)
 
   // Server store
   const settings = useServerStore((state) => state.settings)
@@ -116,8 +124,56 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
       fetchBans()
       fetchMembers()
       fetchRoles()
+      fetchInvites()
     }
   }, [isOpen])
+
+  const fetchInvites = async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/invites`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setInvitesList(Array.isArray(data) ? data : [])
+      }
+    } catch (err) {
+      console.error('Failed to fetch invites:', err)
+    }
+  }
+
+  const handleCreateInvite = async () => {
+    setIsCreatingInvite(true)
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/invites`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ durationHours: Number(inviteDuration) }),
+      })
+      if (res.ok) {
+        const newInv = await res.json()
+        setInvitesList((prev) => [newInv, ...prev])
+        toast.success(`Generated invite code: ${newInv.code}`)
+        copyInvite(newInv.code)
+      } else {
+        toast.error('Failed to generate invite code')
+      }
+    } catch {
+      toast.error('Network error generating invite code')
+    } finally {
+      setIsCreatingInvite(false)
+    }
+  }
+
+  const copyInvite = (code: string) => {
+    navigator.clipboard.writeText(code)
+    setCopiedCode(code)
+    toast.success('Invite code copied to clipboard!')
+    setTimeout(() => setCopiedCode(null), 2500)
+  }
 
   // Sync role editor when selected role changes
   useEffect(() => {
@@ -458,6 +514,12 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                     label="Members Directory"
                   />
                   <NavTabButton
+                    active={activeTab === 'invites'}
+                    onClick={() => setActiveTab('invites')}
+                    icon={<Ticket size={16} />}
+                    label={`Invites (${invitesList.length})`}
+                  />
+                  <NavTabButton
                     active={activeTab === 'bans'}
                     onClick={() => setActiveTab('bans')}
                     icon={<Ban size={16} />}
@@ -498,6 +560,12 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                       <span>Member Moderation & Roles</span>
                     </>
                   )}
+                  {activeTab === 'invites' && (
+                    <>
+                      <Ticket size={20} className="text-emerald-400" />
+                      <span>Invites & Referral Codes</span>
+                    </>
+                  )}
                   {activeTab === 'bans' && (
                     <>
                       <Ban size={20} className="text-emerald-400" />
@@ -510,6 +578,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                   {activeTab === 'channels' && 'Create, reorder, or delete voice and text chat rooms'}
                   {activeTab === 'roles' && 'Assign custom badges, colors, and moderation rights to community roles'}
                   {activeTab === 'members' && 'Manage member permissions, muting, and server access'}
+                  {activeTab === 'invites' && 'Generate and share referral invite codes for new members'}
                   {activeTab === 'bans' && 'Inspect and manage banned accounts for this community'}
                 </p>
               </div>
@@ -1135,7 +1204,123 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                 </div>
               )}
 
-              {/* 5. BANS TAB */}
+              {/* 5. INVITES TAB */}
+              {activeTab === 'invites' && (
+                <div className="max-w-3xl space-y-6">
+                  {/* Create Invite Box */}
+                  <div className="p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                          <Ticket size={16} className="text-emerald-400" />
+                          <span>Generate Invite Link / Code</span>
+                        </h3>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Create single-use referral invite codes for new friends to register
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3">
+                        <select
+                          value={inviteDuration}
+                          onChange={(e) => setInviteDuration(Number(e.target.value))}
+                          className="px-3 py-2 rounded-xl bg-[#080c14] text-slate-200 border border-white/10 text-xs font-semibold focus:outline-none focus:border-emerald-500/60 cursor-pointer"
+                        >
+                          <option value={0}>Never Expires</option>
+                          <option value={1}>Expires in 1 Hour</option>
+                          <option value={6}>Expires in 6 Hours</option>
+                          <option value={24}>Expires in 24 Hours</option>
+                          <option value={168}>Expires in 7 Days</option>
+                        </select>
+
+                        <button
+                          type="button"
+                          onClick={handleCreateInvite}
+                          disabled={isCreatingInvite}
+                          className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-[0_4px_15px_rgba(16,185,129,0.3)] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shrink-0"
+                        >
+                          <Plus size={14} />
+                          <span>{isCreatingInvite ? 'Generating...' : 'Create Invite'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Active & Past Invites List */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                        Generated Invites ({invitesList.length})
+                      </h4>
+                    </div>
+
+                    {invitesList.length === 0 ? (
+                      <div className="text-center py-12 p-6 rounded-2xl bg-white/[0.02] border border-white/5 text-slate-400">
+                        <Ticket size={36} className="mx-auto mb-2 text-emerald-400 opacity-40" />
+                        <p className="font-bold text-sm text-slate-300">No Invites Generated Yet</p>
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Click "Create Invite" above to generate a code for your friends.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {invitesList.map((inv) => {
+                          const isCopied = copiedCode === inv.code
+                          const isUsed = !!inv.usedBy
+                          const isExpired = inv.expiresAt && new Date(inv.expiresAt).getTime() < Date.now()
+
+                          return (
+                            <div
+                              key={inv.id || inv.code}
+                              className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/15 transition-all"
+                            >
+                              <div className="space-y-1">
+                                <div className="flex items-center gap-2.5">
+                                  <span className="font-mono font-black text-base text-emerald-400 tracking-wider">
+                                    {inv.code}
+                                  </span>
+                                  {isUsed ? (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-slate-500/20 text-slate-400 font-bold uppercase">
+                                      Used by @{inv.usedBy}
+                                    </span>
+                                  ) : isExpired ? (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-bold uppercase">
+                                      Expired
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold uppercase">
+                                      Active & Ready
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-slate-400 font-mono">
+                                  Created: {new Date(inv.createdAt).toLocaleDateString()}
+                                  {inv.expiresAt ? ` • Expires: ${new Date(inv.expiresAt).toLocaleDateString()}` : ' • Never expires'}
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => copyInvite(inv.code)}
+                                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                                  isCopied
+                                    ? 'bg-emerald-500 text-white shadow-md'
+                                    : 'bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10'
+                                }`}
+                              >
+                                {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                                <span>{isCopied ? 'Copied!' : 'Copy Code'}</span>
+                              </button>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 6. BANS TAB */}
               {activeTab === 'bans' && (
                 <div className="max-w-3xl space-y-6">
                   <p className="text-xs text-slate-400">
