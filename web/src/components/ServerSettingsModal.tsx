@@ -15,6 +15,9 @@ import {
   UserX,
   MicOff,
   Volume2,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useServerStore } from '../stores/serverStore'
@@ -34,6 +37,8 @@ type TabType = 'overview' | 'channels' | 'roles' | 'members' | 'bans'
 export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProps) {
   const [activeTab, setActiveTab] = useState<TabType>('overview')
   const [showCreateChannel, setShowCreateChannel] = useState(false)
+  const [draggedChannelId, setDraggedChannelId] = useState<string | null>(null)
+  const [dragOverChannelId, setDragOverChannelId] = useState<string | null>(null)
 
   // Server store
   const settings = useServerStore((state) => state.settings)
@@ -66,6 +71,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   // Channel store
   const channels = useChannelStore((state) => state.channels)
   const setChannels = useChannelStore((state) => state.setChannels)
+  const reorderChannels = useChannelStore((state) => state.reorderChannels)
 
   // Auth store
   const token = useAuthStore((state) => state.token)
@@ -641,7 +647,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                     <div>
                       <h3 className="text-sm font-bold text-slate-200">Active Server Channels</h3>
                       <p className="text-xs text-slate-400 mt-0.5">
-                        Manage channel topics, voice lounges, and stream rooms
+                        Drag channels or use arrows to adjust channel order
                       </p>
                     </div>
                     <button
@@ -654,39 +660,136 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                   </div>
 
                   <div className="space-y-2">
-                    {channels.map((ch) => (
-                      <div
-                        key={ch.id}
-                        className="flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all"
-                      >
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <div className="w-9 h-9 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center text-slate-400 font-bold shrink-0">
-                            {ch.type === 'text' ? '#' : <Volume2 size={16} className="text-emerald-400" />}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-sm text-slate-100 flex items-center gap-2">
-                              <span>{ch.name}</span>
-                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 font-mono uppercase">
-                                {ch.type}
-                              </span>
+                    {channels.map((ch, idx) => {
+                      const isDragging = draggedChannelId === ch.id
+                      const isDragOver = dragOverChannelId === ch.id
+                      const isFirst = idx === 0
+                      const isLast = idx === channels.length - 1
+
+                      const handleDragStart = (e: React.DragEvent) => {
+                        setDraggedChannelId(ch.id)
+                        e.dataTransfer.effectAllowed = 'move'
+                        e.dataTransfer.setData('text/plain', ch.id)
+                      }
+
+                      const handleDragOver = (e: React.DragEvent) => {
+                        if (!draggedChannelId || draggedChannelId === ch.id) return
+                        e.preventDefault()
+                        e.dataTransfer.dropEffect = 'move'
+                        if (dragOverChannelId !== ch.id) {
+                          setDragOverChannelId(ch.id)
+                        }
+                      }
+
+                      const handleDrop = async (e: React.DragEvent) => {
+                        e.preventDefault()
+                        if (!draggedChannelId || draggedChannelId === ch.id) {
+                          setDraggedChannelId(null)
+                          setDragOverChannelId(null)
+                          return
+                        }
+
+                        const list = [...channels]
+                        const fromIdx = list.findIndex((c) => c.id === draggedChannelId)
+                        const toIdx = list.findIndex((c) => c.id === ch.id)
+
+                        if (fromIdx !== -1 && toIdx !== -1) {
+                          const [moved] = list.splice(fromIdx, 1)
+                          list.splice(toIdx, 0, moved)
+                          await reorderChannels(list, token || undefined)
+                          toast.success('Channel order updated')
+                        }
+
+                        setDraggedChannelId(null)
+                        setDragOverChannelId(null)
+                      }
+
+                      const handleMove = async (direction: 'up' | 'down') => {
+                        const list = [...channels]
+                        const index = list.findIndex((c) => c.id === ch.id)
+                        if (index === -1) return
+                        const newIndex = direction === 'up' ? index - 1 : index + 1
+                        if (newIndex < 0 || newIndex >= list.length) return
+
+                        const [moved] = list.splice(index, 1)
+                        list.splice(newIndex, 0, moved)
+                        await reorderChannels(list, token || undefined)
+                        toast.success('Channel order updated')
+                      }
+
+                      return (
+                        <div
+                          key={ch.id}
+                          draggable
+                          onDragStart={handleDragStart}
+                          onDragOver={handleDragOver}
+                          onDragEnd={() => {
+                            setDraggedChannelId(null)
+                            setDragOverChannelId(null)
+                          }}
+                          onDrop={handleDrop}
+                          className={`flex items-center justify-between p-4 rounded-2xl bg-white/[0.03] border border-white/10 hover:border-white/20 transition-all ${
+                            isDragging ? 'opacity-30 scale-98' : ''
+                          } ${
+                            isDragOver ? 'ring-2 ring-emerald-400 bg-emerald-500/10' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-3.5 min-w-0">
+                            <span
+                              className="text-slate-600 hover:text-slate-300 cursor-grab active:cursor-grabbing shrink-0"
+                              title="Drag to reorder"
+                            >
+                              <GripVertical size={16} />
+                            </span>
+                            <div className="w-9 h-9 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center text-slate-400 font-bold shrink-0">
+                              {ch.type === 'text' ? '#' : <Volume2 size={16} className="text-emerald-400" />}
                             </div>
-                            {ch.topic && (
-                              <div className="text-xs text-slate-400 truncate max-w-lg mt-0.5">
-                                {ch.topic}
+                            <div className="min-w-0">
+                              <div className="font-bold text-sm text-slate-100 flex items-center gap-2">
+                                <span>{ch.name}</span>
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-slate-400 font-mono uppercase">
+                                  {ch.type}
+                                </span>
                               </div>
-                            )}
+                              {ch.topic && (
+                                <div className="text-xs text-slate-400 truncate max-w-lg mt-0.5">
+                                  {ch.topic}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              disabled={isFirst}
+                              onClick={() => handleMove('up')}
+                              className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-white/5 disabled:opacity-20 disabled:hover:text-slate-400 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                              title="Move Up"
+                            >
+                              <ArrowUp size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={isLast}
+                              onClick={() => handleMove('down')}
+                              className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-white/5 disabled:opacity-20 disabled:hover:text-slate-400 disabled:hover:bg-transparent transition-colors cursor-pointer"
+                              title="Move Down"
+                            >
+                              <ArrowDown size={15} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteChannel(ch.id, ch.name)}
+                              className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer ml-1"
+                              title="Delete Channel"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </div>
                         </div>
-
-                        <button
-                          onClick={() => handleDeleteChannel(ch.id, ch.name)}
-                          className="p-2 rounded-xl text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer"
-                          title="Delete Channel"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 </div>
               )}

@@ -18,6 +18,7 @@ interface ChannelState {
   updateChannel: (id: string, updates: Partial<Channel>) => void
   removeChannel: (id: string) => void
   setActiveChannel: (id: string | null) => void
+  reorderChannels: (channels: Channel[], token?: string) => Promise<boolean>
 }
 
 export const useChannelStore = create<ChannelState>((set) => ({
@@ -45,6 +46,54 @@ export const useChannelStore = create<ChannelState>((set) => ({
     })),
 
   setActiveChannel: (id) => set({ activeChannelId: id }),
+
+  reorderChannels: async (newChannels: Channel[], token?: string) => {
+    // 1. Assign index-based sequential positions
+    const updatedWithPositions = newChannels.map((ch, idx) => ({
+      ...ch,
+      position: idx,
+    }))
+
+    // 2. Optimistically update local store
+    set({ channels: updatedWithPositions })
+
+    if (!token) return true
+
+    // 3. Persist to backend
+    try {
+      const payload = updatedWithPositions.map((ch) => ({
+        id: ch.id,
+        position: ch.position,
+      }))
+
+      const res = await fetch('http://localhost:8080/api/channels/reorder', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      })
+
+      if (!res.ok) {
+        // Fallback to individual PATCH if reorder endpoint is unreachable
+        for (const item of payload) {
+          await fetch(`http://localhost:8080/api/channels/${item.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ position: item.position }),
+          })
+        }
+      }
+      return true
+    } catch (err) {
+      console.error('Failed to persist channel reorder:', err)
+      return false
+    }
+  },
 }))
 
 // Selectors

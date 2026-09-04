@@ -184,3 +184,22 @@ func (h *Handler) Delete(c echo.Context) error {
 
 	return c.NoContent(http.StatusNoContent)
 }
+
+// Reorder handles PATCH or POST /api/channels/reorder
+func (h *Handler) Reorder(c echo.Context) error {
+	var items []ChannelPositionItem
+	if err := c.Bind(&items); err != nil {
+		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invalid request body", nil)
+	}
+
+	if len(items) == 0 {
+		return c.NoContent(http.StatusOK)
+	}
+
+	if err := h.store.ReorderChannels(items); err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to reorder channels", nil)
+	}
+
+	return c.NoContent(http.StatusOK)
+}
+
