@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useWebSocketStore, type WSMessage } from '../stores/websocketStore'
+import { useSettingsStore } from '../stores/settingsStore'
 
 interface AudioElementMap {
   [trackId: string]: HTMLAudioElement
@@ -15,12 +16,15 @@ export function useSFU() {
   const send = useWebSocketStore((state) => state.send)
   const subscribe = useWebSocketStore((state) => state.subscribe)
 
+  const settings = useSettingsStore()
+
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
   const audioElementsRef = useRef<AudioElementMap>({})
   const iceBufferRef = useRef<RTCIceCandidateInit[]>([])
   const isRemoteSetRef = useRef(false)
   const audioContextRef = useRef<AudioContext | null>(null)
+  const isPttPressedRef = useRef(false)
 
   // WebRTC Connection Lifecycle
   useEffect(() => {
@@ -70,27 +74,44 @@ export function useSFU() {
             const trackId = event.track.id
             let audioEl = audioElementsRef.current[trackId]
             if (!audioEl) {
-              audioEl = new Audio()
+              audioEl = document.createElement('audio')
               audioEl.autoplay = true
-              audioEl.muted = selfDeafened
+              audioEl.muted = useVoiceStore.getState().selfDeafened
+              audioEl.style.display = 'none'
+              document.body.appendChild(audioEl)
               audioElementsRef.current[trackId] = audioEl
             }
-            audioEl.srcObject = new MediaStream([event.track])
-            audioEl.play().catch((err) => console.log('[useSFU] Audio autoplay notice:', err))
+
+            const mediaStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track])
+            audioEl.srcObject = mediaStream
+
+            const currentSettings = useSettingsStore.getState()
+            audioEl.volume = Math.min(1, Math.max(0, (currentSettings.outputVolume || 100) / 100))
+
+            if (currentSettings.outputDeviceId && typeof (audioEl as any).setSinkId === 'function') {
+              ;(audioEl as any).setSinkId(currentSettings.outputDeviceId).catch(() => {})
+            }
+
+            audioEl.play().catch((err) => {
+              console.log('[useSFU] Audio play notice (waiting for user gesture):', err)
+            })
           }
         }
 
-        // 4. Capture microphone stream with standard WebRTC DSP
+        // 4. Capture microphone stream using dynamic settings constraints
         let stream: MediaStream
         try {
-          stream = await navigator.mediaDevices.getUserMedia({
+          const currentSettings = useSettingsStore.getState()
+          const constraints: MediaStreamConstraints = {
             audio: {
-              echoCancellation: true,
-              noiseSuppression: true,
-              autoGainControl: true,
+              deviceId: currentSettings.inputDeviceId ? { exact: currentSettings.inputDeviceId } : undefined,
+              echoCancellation: currentSettings.echoCancellation,
+              noiseSuppression: currentSettings.noiseSuppression,
+              autoGainControl: currentSettings.autoGainControl,
             },
             video: false,
-          })
+          }
+          stream = await navigator.mediaDevices.getUserMedia(constraints)
         } catch (mediaErr) {
           console.warn('[useSFU] getUserMedia error (fallback to audio transceiver):', mediaErr)
           stream = new MediaStream()
@@ -103,9 +124,10 @@ export function useSFU() {
 
         localStreamRef.current = stream
 
-        // Apply initial mute state
+        // Apply initial mute / PTT state
+        const isPTT = settings.inputMode === 'push_to_talk'
         stream.getAudioTracks().forEach((track) => {
-          track.enabled = !selfMuted
+          track.enabled = isPTT ? false : !selfMuted
           pc.addTrack(track, stream)
         })
 
@@ -138,80 +160,70 @@ export function useSFU() {
 
     initConnection()
 
-    return () => {
-      isMounted = false
-      cleanup()
-    }
-  }, [channelId])
-
-  // Subscribe to WebRTC signaling messages from WebSocket
-  useEffect(() => {
-    const unsubscribe = subscribe(async (msg: WSMessage) => {
+    // 7. Subscribe to WebSocket signaling events
+    const unsubscribe = subscribe((msg: WSMessage) => {
       const pc = pcRef.current
 
-      // Handle WebRTC Answer from SFU (initial negotiation response)
+      // Handle WebRTC Answer from SFU
       if (msg.type === 'webrtc_answer' && pc) {
         const payload = msg.payload as { sdp?: string }
         if (payload?.sdp) {
-          try {
-            console.log('[useSFU] Received WebRTC answer from SFU')
-            await pc.setRemoteDescription(
-              new RTCSessionDescription({
-                type: 'answer',
-                sdp: payload.sdp,
-              })
-            )
-            isRemoteSetRef.current = true
-
-            // Drain buffered ICE candidates
-            for (const candidate of iceBufferRef.current) {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate))
-            }
-            iceBufferRef.current = []
-          } catch (err) {
-            console.error('[useSFU] Error setting remote description for answer:', err)
-          }
+          console.log('[useSFU] Setting remote description (Answer)...')
+          pc.setRemoteDescription(
+            new RTCSessionDescription({
+              type: 'answer',
+              sdp: payload.sdp,
+            })
+          )
+            .then(() => {
+              isRemoteSetRef.current = true
+              console.log('[useSFU] Remote description set successfully. Flushing ICE buffer:', iceBufferRef.current.length)
+              while (iceBufferRef.current.length > 0) {
+                const candidate = iceBufferRef.current.shift()
+                if (candidate) {
+                  pc.addIceCandidate(new RTCIceCandidate(candidate)).catch((err) =>
+                    console.error('[useSFU] Error adding buffered ICE candidate:', err)
+                  )
+                }
+              }
+            })
+            .catch((err) => {
+              console.error('[useSFU] Failed to set remote description:', err)
+            })
         }
       }
 
-      // Handle WebRTC Offer from SFU (renegotiation when another user publishes a track)
+      // Handle renegotiation offer from SFU
       if (msg.type === 'webrtc_offer' && pc) {
         const payload = msg.payload as { sdp?: string; channelId?: string }
         if (payload?.sdp) {
-          try {
-            console.log('[useSFU] Received renegotiation offer from SFU')
-            await pc.setRemoteDescription(
-              new RTCSessionDescription({
-                type: 'offer',
-                sdp: payload.sdp,
-              })
-            )
-            isRemoteSetRef.current = true
+          console.log('[useSFU] Received renegotiation offer from SFU...')
+          pc.setRemoteDescription(
+            new RTCSessionDescription({
+              type: 'offer',
+              sdp: payload.sdp,
+            })
+          )
+            .then(async () => {
+              isRemoteSetRef.current = true
+              const answer = await pc.createAnswer()
+              await pc.setLocalDescription(answer)
 
-            // Drain buffered ICE candidates
-            for (const candidate of iceBufferRef.current) {
-              await pc.addIceCandidate(new RTCIceCandidate(candidate))
-            }
-            iceBufferRef.current = []
-
-            // Create and send answer back to SFU
-            const answer = await pc.createAnswer()
-            await pc.setLocalDescription(answer)
-
-            const targetChan = channelId || (payload.channelId as string)
-            if (targetChan) {
-              send({
-                type: 'webrtc_answer',
-                channelId: targetChan,
-                payload: {
+              const targetChan = channelId || (payload.channelId as string)
+              if (targetChan) {
+                send({
+                  type: 'webrtc_answer',
                   channelId: targetChan,
-                  sdp: answer.sdp,
-                },
-              })
-            }
-          } catch (err) {
-            console.error('[useSFU] Error handling renegotiation offer:', err)
-          }
+                  payload: {
+                    channelId: targetChan,
+                    sdp: answer.sdp,
+                  },
+                })
+              }
+            })
+            .catch((err) => {
+              console.error('[useSFU] Error handling renegotiation offer:', err)
+            })
         }
       }
 
@@ -241,27 +253,92 @@ export function useSFU() {
     })
 
     return () => {
+      isMounted = false
       unsubscribe()
+      cleanup()
     }
-  }, [subscribe])
+  }, [channelId, subscribe, send])
+
+  // Sync Push-to-Talk (PTT) key listeners
+  useEffect(() => {
+    if (!channelId || settings.inputMode !== 'push_to_talk') return
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const targetTag = (e.target as HTMLElement)?.tagName?.toLowerCase()
+      if (targetTag === 'input' || targetTag === 'textarea') return
+
+      const keyMatch = e.code === settings.pttKey || e.key === settings.pttKey
+      if (keyMatch && !isPttPressedRef.current) {
+        isPttPressedRef.current = true
+        if (localStreamRef.current && !selfMuted) {
+          localStreamRef.current.getAudioTracks().forEach((track) => {
+            track.enabled = true
+          })
+        }
+      }
+    }
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      const keyMatch = e.code === settings.pttKey || e.key === settings.pttKey
+      if (keyMatch && isPttPressedRef.current) {
+        isPttPressedRef.current = false
+        if (localStreamRef.current) {
+          localStreamRef.current.getAudioTracks().forEach((track) => {
+            track.enabled = false
+          })
+        }
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+    }
+  }, [channelId, settings.inputMode, settings.pttKey, selfMuted])
 
   // Sync mute state with microphone track
   useEffect(() => {
     if (localStreamRef.current) {
+      const isPTT = settings.inputMode === 'push_to_talk'
       localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !selfMuted
+        track.enabled = isPTT ? isPttPressedRef.current : !selfMuted
       })
     }
-  }, [selfMuted])
+  }, [selfMuted, settings.inputMode])
 
-  // Sync deafen state with remote audio elements
+  // Real-time DSP Constraints Synchronization (Echo Cancellation, Noise Suppression, AGC)
   useEffect(() => {
+    if (!localStreamRef.current) return
+
+    const track = localStreamRef.current.getAudioTracks()[0]
+    if (!track) return
+
+    const audioConstraints: MediaTrackConstraints = {
+      echoCancellation: settings.echoCancellation,
+      noiseSuppression: settings.noiseSuppression,
+      autoGainControl: settings.autoGainControl,
+    }
+
+    if (typeof track.applyConstraints === 'function') {
+      track.applyConstraints(audioConstraints).catch((err) => {
+        console.log('[useSFU] applyConstraints note:', err)
+      })
+    }
+  }, [settings.echoCancellation, settings.noiseSuppression, settings.autoGainControl])
+
+  // Sync deafen state and volume with remote audio elements
+  useEffect(() => {
+    const vol = Math.min(1, Math.max(0, settings.outputVolume / 100))
     Object.values(audioElementsRef.current).forEach((audioEl) => {
       audioEl.muted = selfDeafened
+      audioEl.volume = vol
     })
-  }, [selfDeafened])
+  }, [selfDeafened, settings.outputVolume])
 
-  // Setup speaking detection via Web Audio AnalyserNode (100ms, avg > 20)
+  // Setup speaking detection and voice activity gating via Web Audio AnalyserNode
   function setupSpeakingDetection(stream: MediaStream, activeChanId: string) {
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
@@ -275,36 +352,112 @@ export function useSFU() {
 
       const dataArray = new Uint8Array(analyser.frequencyBinCount)
       let isSpeaking = false
+      let silenceTimer: ReturnType<typeof setTimeout> | null = null
+      const HOLD_TIME_MS = 300 // Hangover hold time to prevent clipping speech
 
       const checkSpeaking = () => {
         if (!audioContextRef.current || audioContextRef.current.state === 'closed') return
 
-        analyser.getByteFrequencyData(dataArray)
-        const sum = dataArray.reduce((acc, val) => acc + val, 0)
-        const avg = sum / dataArray.length
+        const currentSettings = useSettingsStore.getState()
+        const isPTT = currentSettings.inputMode === 'push_to_talk'
 
-        // Threshold = 20 (as defined in spec-voice.md Section 3.3)
-        const currentlySpeaking = avg > 20 && !selfMuted
+        // If self-muted, cut transmission immediately
+        if (useVoiceStore.getState().selfMuted) {
+          if (isSpeaking) {
+            isSpeaking = false
+            setParticipantSpeaking('local', false)
+          }
+          if (localStreamRef.current) {
+            localStreamRef.current.getAudioTracks().forEach((track) => {
+              track.enabled = false
+            })
+          }
+          return
+        }
 
-        if (currentlySpeaking !== isSpeaking) {
-          isSpeaking = currentlySpeaking
-          setParticipantSpeaking('local', isSpeaking)
-
-          send({
-            type: 'speaking',
-            channelId: activeChanId,
-            payload: {
+        // In Push-to-Talk mode
+        if (isPTT) {
+          const pttActive = isPttPressedRef.current
+          if (pttActive !== isSpeaking) {
+            isSpeaking = pttActive
+            setParticipantSpeaking('local', isSpeaking)
+            if (localStreamRef.current) {
+              localStreamRef.current.getAudioTracks().forEach((track) => {
+                track.enabled = isSpeaking
+              })
+            }
+            send({
+              type: 'speaking',
               channelId: activeChanId,
-              speaking: isSpeaking,
-            },
+              payload: {
+                channelId: activeChanId,
+                speaking: isSpeaking,
+              },
+            })
+          }
+          return
+        }
+
+        // Voice Activity Mode: Calculate input volume level (0 - 100)
+        analyser.getByteFrequencyData(dataArray)
+        let sum = 0
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i]
+        }
+        const avg = sum / dataArray.length
+        const volumeLevel = Math.min(100, Math.round((avg / 128) * (currentSettings.inputVolume / 100) * 100))
+        const threshold = currentSettings.vadSensitivity
+
+        // Ensure audio track is always enabled when not muted
+        if (localStreamRef.current) {
+          localStreamRef.current.getAudioTracks().forEach((track) => {
+            track.enabled = true
           })
+        }
+
+        if (volumeLevel >= threshold) {
+          if (silenceTimer) {
+            clearTimeout(silenceTimer)
+            silenceTimer = null
+          }
+
+          if (!isSpeaking) {
+            isSpeaking = true
+            setParticipantSpeaking('local', true)
+            send({
+              type: 'speaking',
+              channelId: activeChanId,
+              payload: {
+                channelId: activeChanId,
+                speaking: true,
+              },
+            })
+          }
+        } else {
+          // Below threshold: hold for HOLD_TIME_MS before turning off speaking indicator
+          if (isSpeaking && !silenceTimer) {
+            silenceTimer = setTimeout(() => {
+              isSpeaking = false
+              silenceTimer = null
+              setParticipantSpeaking('local', false)
+              send({
+                type: 'speaking',
+                channelId: activeChanId,
+                payload: {
+                  channelId: activeChanId,
+                  speaking: false,
+                },
+              })
+            }, HOLD_TIME_MS)
+          }
         }
       }
 
-      const intervalId = setInterval(checkSpeaking, 100)
+      const intervalId = setInterval(checkSpeaking, 50)
 
       return () => {
         clearInterval(intervalId)
+        if (silenceTimer) clearTimeout(silenceTimer)
         source.disconnect()
         ctx.close().catch(() => {})
       }

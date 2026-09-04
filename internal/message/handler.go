@@ -21,19 +21,22 @@ func NewHandler(store *Store) *Handler {
 
 // MessageRequest represents message create/edit request
 type MessageRequest struct {
-	Content string `json:"content"`
+	Content     string       `json:"content"`
+	Attachments []Attachment `json:"attachments,omitempty"`
 }
 
 // MessageResponse represents message in API response
 type MessageResponse struct {
-	ID         string  `json:"id"`
-	ChannelID  string  `json:"channel_id"`
-	AuthorID   string  `json:"author_id"`
-	AuthorName string  `json:"author_name,omitempty"`
-	Content    string  `json:"content"`
-	CreatedAt  string  `json:"created_at"`
-	EditedAt   *string `json:"edited_at,omitempty"`
-	DeletedAt  *string `json:"deleted_at,omitempty"`
+	ID              string       `json:"id"`
+	ChannelID       string       `json:"channel_id"`
+	AuthorID        string       `json:"author_id"`
+	AuthorName      string       `json:"author_name,omitempty"`
+	AuthorAvatarURL string       `json:"author_avatar_url,omitempty"`
+	Content         string       `json:"content"`
+	Attachments     []Attachment `json:"attachments"`
+	CreatedAt       string       `json:"created_at"`
+	EditedAt        *string      `json:"edited_at,omitempty"`
+	DeletedAt       *string      `json:"deleted_at,omitempty"`
 }
 
 // List handles GET /api/channels/:id/messages
@@ -56,20 +59,26 @@ func (h *Handler) List(c echo.Context) error {
 
 	response := make([]MessageResponse, len(messages))
 	for i, msg := range messages {
+		attachments := msg.Attachments
+		if attachments == nil {
+			attachments = []Attachment{}
+		}
 		response[i] = MessageResponse{
-			ID:         msg.ID,
-			ChannelID:  msg.ChannelID,
-			AuthorID:   msg.AuthorID,
-			AuthorName: msg.AuthorName,
-			Content:    msg.Content,
-			CreatedAt:  msg.CreatedAt.Format("2006-01-02T15:04:05Z"),
+			ID:              msg.ID,
+			ChannelID:       msg.ChannelID,
+			AuthorID:        msg.AuthorID,
+			AuthorName:      msg.AuthorName,
+			AuthorAvatarURL: msg.AuthorAvatarURL,
+			Content:         msg.Content,
+			Attachments:     attachments,
+			CreatedAt:       msg.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
 		}
 		if msg.EditedAt != nil {
-			edited := msg.EditedAt.Format("2006-01-02T15:04:05Z")
+			edited := msg.EditedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")
 			response[i].EditedAt = &edited
 		}
 		if msg.DeletedAt != nil {
-			deleted := msg.DeletedAt.Format("2006-01-02T15:04:05Z")
+			deleted := msg.DeletedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")
 			response[i].DeletedAt = &deleted
 		}
 	}
@@ -88,18 +97,24 @@ func (h *Handler) Create(c echo.Context) error {
 
 	// Validate
 	req.Content = trimAndValidate(req.Content)
-	if req.Content == "" {
-		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Message content is required", nil)
+	if req.Content == "" && len(req.Attachments) == 0 {
+		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Message content or attachment is required", nil)
 	}
 	if len(req.Content) > MaxMessageLength {
 		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Message exceeds maximum length of 4000 characters", nil)
 	}
 
+	attachments := req.Attachments
+	if attachments == nil {
+		attachments = []Attachment{}
+	}
+
 	// TODO: Get author ID from JWT middleware
 	msg := &Message{
-		ChannelID: channelID,
-		AuthorID:  "system", // TODO: Get from JWT
-		Content:   req.Content,
+		ChannelID:   channelID,
+		AuthorID:    "system", // TODO: Get from JWT
+		Content:     req.Content,
+		Attachments: attachments,
 	}
 
 	if err := h.store.CreateMessage(msg); err != nil {
@@ -107,11 +122,12 @@ func (h *Handler) Create(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, MessageResponse{
-		ID:        msg.ID,
-		ChannelID: msg.ChannelID,
-		AuthorID:  msg.AuthorID,
-		Content:   msg.Content,
-		CreatedAt: msg.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:          msg.ID,
+		ChannelID:   msg.ChannelID,
+		AuthorID:    msg.AuthorID,
+		Content:     msg.Content,
+		Attachments: attachments,
+		CreatedAt:   msg.CreatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"),
 	})
 }
 
@@ -239,6 +255,11 @@ func (h *Handler) CreateMessage(channelID, authorID, content string) (*Message, 
 
 	if err := h.store.CreateMessage(msg); err != nil {
 		return nil, err
+	}
+
+	// Fetch created message with joined user data (display name and avatar URL)
+	if created, err := h.store.GetMessageByID(msg.ID); err == nil && created != nil {
+		return created, nil
 	}
 
 	return msg, nil

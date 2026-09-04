@@ -63,9 +63,42 @@ func NewHub() *Hub {
 	}
 }
 
+// PresencePayload represents a presence update event
+type PresencePayload struct {
+	UserID   string `json:"userId"`
+	Username string `json:"username,omitempty"`
+	Status   string `json:"status"` // "online" or "offline"
+}
+
+// PresenceSyncPayload represents initial online users snapshot
+type PresenceSyncPayload struct {
+	OnlineUserIDs []string `json:"onlineUserIds"`
+}
+
 // SetVoiceHandler sets the voice handler
 func (h *Hub) SetVoiceHandler(handler VoiceHandler) {
 	h.voiceHandler = handler
+}
+
+func (h *Hub) getOnlineUserIDsLocked() []string {
+	userSet := make(map[string]bool)
+	for _, c := range h.clients {
+		if c.UserID != "" {
+			userSet[c.UserID] = true
+		}
+	}
+	ids := make([]string, 0, len(userSet))
+	for id := range userSet {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// GetOnlineUserIDs returns list of unique user IDs currently connected
+func (h *Hub) GetOnlineUserIDs() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.getOnlineUserIDsLocked()
 }
 
 // Run starts the hub
@@ -75,8 +108,22 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client.ID] = client
+			onlineIDs := h.getOnlineUserIDsLocked()
 			h.mu.Unlock()
 			log.Printf("WebSocket: Client %s connected (user: %s)", client.ID, client.UserID)
+
+			// Send presence snapshot to newly joined client
+			_ = client.SendJSON(Message{
+				Type:    "presence_sync",
+				Payload: MustMarshal(PresenceSyncPayload{OnlineUserIDs: onlineIDs}),
+			})
+
+			// Broadcast presence to all other clients
+			h.BroadcastAll("user_presence", PresencePayload{
+				UserID:   client.UserID,
+				Username: client.Username,
+				Status:   "online",
+			})
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -84,8 +131,28 @@ func (h *Hub) Run() {
 				delete(h.clients, client.ID)
 				client.Conn.Close()
 				log.Printf("WebSocket: Client %s disconnected", client.ID)
+
+				// Check if user has no remaining active connections
+				userID := client.UserID
+				hasOtherConnections := false
+				for _, c := range h.clients {
+					if c.UserID == userID {
+						hasOtherConnections = true
+						break
+					}
+				}
+				h.mu.Unlock()
+
+				if !hasOtherConnections && userID != "" {
+					h.BroadcastAll("user_presence", PresencePayload{
+						UserID:   userID,
+						Username: client.Username,
+						Status:   "offline",
+					})
+				}
+			} else {
+				h.mu.Unlock()
 			}
-			h.mu.Unlock()
 
 		case message := <-h.broadcast:
 			log.Printf("[Hub] Received broadcast message type=%s channel=%s", message.Type, message.ChannelID)

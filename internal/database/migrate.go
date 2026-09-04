@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/golang-migrate/migrate/v4"
 	_ "github.com/golang-migrate/migrate/v4/database/sqlite"
@@ -10,9 +11,12 @@ import (
 )
 
 func RunMigrations(dbPath string, migrationsPath string) error {
+	cleanMigrations := filepath.ToSlash(migrationsPath)
+	cleanDB := filepath.ToSlash(dbPath)
+
 	m, err := migrate.New(
-		"file://"+migrationsPath,
-		"sqlite://"+dbPath+"?_journal_mode=WAL",
+		"file://"+cleanMigrations,
+		"sqlite://"+cleanDB+"?_journal_mode=WAL",
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create migrator: %w", err)
@@ -20,6 +24,18 @@ func RunMigrations(dbPath string, migrationsPath string) error {
 	defer m.Close()
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		version, dirty, vErr := m.Version()
+		if vErr == nil && dirty {
+			targetVersion := int(version) - 1
+			if targetVersion < 0 {
+				targetVersion = 0
+			}
+			_ = m.Force(targetVersion)
+			if retryErr := m.Up(); retryErr != nil && retryErr != migrate.ErrNoChange {
+				return fmt.Errorf("failed to run migrations after dirty recovery: %w", retryErr)
+			}
+			return nil
+		}
 		return fmt.Errorf("failed to run migrations: %w", err)
 	}
 

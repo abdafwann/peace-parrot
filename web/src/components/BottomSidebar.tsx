@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Radio,
   Activity,
@@ -7,7 +7,6 @@ import {
   VideoOff,
   ScreenShare,
   Gamepad2,
-  Megaphone,
   Mic,
   MicOff,
   Headphones,
@@ -16,14 +15,23 @@ import {
   ChevronDown,
   Volume2,
   Moon,
+  Music,
 } from 'lucide-react'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useChannelStore } from '../stores/channelStore'
 import { useAuthStore } from '../stores/authStore'
+import { useSettingsStore } from '../stores/settingsStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useVoiceCleanup } from '../hooks/useVoice'
+import { UserSettingsModal } from './UserSettingsModal'
+import { SoundboardModal } from './SoundboardModal'
+import { playSoundEffect } from '../utils/soundEffects'
+import { playSoundboardEffect } from '../utils/soundboardAudio'
+import { toast } from '../stores/toastStore'
 
 export function BottomSidebar() {
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
+  const [isSoundboardOpen, setIsSoundboardOpen] = useState(false)
   const isInVoice = useVoiceStore((state) => state.channelId !== null)
   const voiceChannelId = useVoiceStore((state) => state.channelId)
   const selfMuted = useVoiceStore((state) => state.selfMuted)
@@ -41,9 +49,57 @@ export function BottomSidebar() {
   const channels = useChannelStore((state) => state.channels)
   const voiceChannel = channels.find((c) => c.id === voiceChannelId)
 
+  // Listen for real-time soundboard events across voice channels
+  useEffect(() => {
+    const unsubscribe = useWebSocketStore.getState().subscribe((msg) => {
+      if (msg.type === 'soundboard_play') {
+        const payload = (msg.payload || {}) as {
+          soundId?: string
+          soundName?: string
+          soundUrl?: string
+          channelId?: string
+          username?: string
+          userId?: string
+        }
+        if (payload.soundId) {
+          const currentUserId = useAuthStore.getState().user?.id
+          const senderId = payload.userId || ''
+          const isSelf = Boolean(payload.userId && payload.userId === currentUserId)
+          const soundboardVol = useSettingsStore.getState().soundboardVolume ?? 80
+
+          // Only play audio if this was broadcast from another user AND soundboard isn't muted
+          if (!isSelf && soundboardVol > 0) {
+            playSoundboardEffect(payload.soundId, payload.soundUrl)
+            toast.info(
+              `played "${payload.soundName || payload.soundId}"`,
+              `🔊 ${payload.username || 'Someone'}`
+            )
+          }
+
+          // Trigger green speaking indicator ring on user's avatar while sound plays
+          if (senderId) {
+            useVoiceStore.getState().setParticipantSpeaking(senderId, true)
+            if (isSelf) {
+              useVoiceStore.getState().setParticipantSpeaking('local', true)
+            }
+
+            setTimeout(() => {
+              useVoiceStore.getState().setParticipantSpeaking(senderId, false)
+              if (isSelf) {
+                useVoiceStore.getState().setParticipantSpeaking('local', false)
+              }
+            }, 1800)
+          }
+        }
+      }
+    })
+    return unsubscribe
+  }, [])
+
   const handleToggleMute = () => {
     const nextMuted = !selfMuted
     setSelfMuted(nextMuted)
+    playSoundEffect(nextMuted ? 'mute' : 'unmute')
 
     if (voiceChannelId) {
       useWebSocketStore.getState().send({
@@ -61,6 +117,7 @@ export function BottomSidebar() {
   const handleToggleDeafen = () => {
     const nextDeafened = !selfDeafened
     setSelfDeafened(nextDeafened)
+    playSoundEffect(nextDeafened ? 'mute' : 'unmute')
 
     if (voiceChannelId) {
       useWebSocketStore.getState().send({
@@ -138,7 +195,7 @@ export function BottomSidebar() {
             {/* 1. Camera button */}
             <button
               onClick={() => setIsVideoOn(!isVideoOn)}
-              className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 ${
+              className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer ${
                 isVideoOn
                   ? 'bg-[#23a559] text-white shadow-sm'
                   : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white'
@@ -151,7 +208,7 @@ export function BottomSidebar() {
             {/* 2. Screen Share button */}
             <button
               onClick={() => setIsScreenSharing(!isScreenSharing)}
-              className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 ${
+              className={`h-8 rounded-lg flex items-center justify-center transition-all duration-150 active:scale-95 cursor-pointer ${
                 isScreenSharing
                   ? 'bg-[#23a559] text-white shadow-sm'
                   : 'bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white'
@@ -163,18 +220,19 @@ export function BottomSidebar() {
 
             {/* 3. Activities / Apps button */}
             <button
-              className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95"
+              className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95 cursor-pointer"
               title="Start Activity"
             >
               <Gamepad2 size={17} />
             </button>
 
-            {/* 4. Soundboard / Spotlight button */}
+            {/* 4. Soundboard button */}
             <button
-              className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95"
+              onClick={() => setIsSoundboardOpen(true)}
+              className="h-8 rounded-lg flex items-center justify-center bg-[var(--color-bg-tertiary)] hover:bg-[var(--color-bg-hover)] text-[var(--color-text-secondary)] hover:text-white transition-all duration-150 active:scale-95 cursor-pointer"
               title="Open Soundboard"
             >
-              <Megaphone size={17} />
+              <Music size={17} />
             </button>
           </div>
         </div>
@@ -183,16 +241,24 @@ export function BottomSidebar() {
       {/* User Profile Bar (Always visible at bottom) */}
       <div className="h-[52px] px-2 flex items-center justify-between gap-1 shrink-0">
         {/* Left: User Avatar & Name */}
-        <div className="flex items-center gap-2 min-w-0 flex-1 px-1 py-1 rounded-md hover:bg-[var(--color-bg-hover)] cursor-pointer transition-colors">
+        <div
+          onClick={() => setIsSettingsOpen(true)}
+          className="flex items-center gap-2 min-w-0 flex-1 px-1 py-1 rounded-md hover:bg-[var(--color-bg-hover)] cursor-pointer transition-colors group"
+          title="Open User Settings"
+        >
           {/* Avatar with Status badge */}
           <div className="relative shrink-0">
             <div
-              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shadow-sm"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shadow-sm transition-transform group-hover:scale-105 overflow-hidden"
               style={{
-                background: 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))',
+                background: user?.avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))',
               }}
             >
-              {(user?.displayName || user?.username || 'U')[0].toUpperCase()}
+              {user?.avatarUrl ? (
+                <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+              ) : (
+                (user?.displayName || user?.username || 'U')[0].toUpperCase()
+              )}
             </div>
             {/* Status dot / moon indicator */}
             <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full bg-[var(--color-bg-tertiary)] flex items-center justify-center">
@@ -206,8 +272,8 @@ export function BottomSidebar() {
 
           {/* Username & Status */}
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-[var(--color-text-primary)] truncate leading-tight">
-              {user?.displayName || user?.username || 'Username'}
+            <p className="text-sm font-semibold text-[var(--color-text-primary)] truncate leading-tight group-hover:text-white">
+              {user?.displayName || user?.username || 'User'}
             </p>
             {isInVoice ? (
               <p className="text-[11px] text-[#23a559] flex items-center gap-1 font-medium leading-none mt-0.5">
@@ -228,7 +294,7 @@ export function BottomSidebar() {
           <div className="flex items-center">
             <button
               onClick={handleToggleMute}
-              className={`p-1.5 rounded-md transition-colors ${
+              className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                 selfMuted
                   ? 'text-[#ed4245] hover:bg-[#ed4245]/15'
                   : 'text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)]'
@@ -244,7 +310,7 @@ export function BottomSidebar() {
           <div className="flex items-center">
             <button
               onClick={handleToggleDeafen}
-              className={`p-1.5 rounded-md transition-colors ${
+              className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                 selfDeafened
                   ? 'text-[#ed4245] hover:bg-[#ed4245]/15'
                   : 'text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)]'
@@ -258,7 +324,8 @@ export function BottomSidebar() {
 
           {/* Settings button */}
           <button
-            className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)] transition-colors group"
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-1.5 rounded-md text-[var(--color-text-secondary)] hover:text-white hover:bg-[var(--color-bg-hover)] transition-colors group cursor-pointer"
             title="User Settings"
           >
             <Settings
@@ -268,6 +335,18 @@ export function BottomSidebar() {
           </button>
         </div>
       </div>
+
+      {/* User Settings Modal */}
+      <UserSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      {/* Soundboard Modal */}
+      <SoundboardModal
+        isOpen={isSoundboardOpen}
+        onClose={() => setIsSoundboardOpen(false)}
+      />
     </div>
   )
 }

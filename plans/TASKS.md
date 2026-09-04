@@ -96,15 +96,21 @@
 - [x] Layout shell (server/channel/member sidebars) ✅
 - [x] Zustand stores ✅
 - [x] Theme toggle ✅
-- [x] WebSocket manager (in progress) 🔄
+- [x] User Settings system (Profile, Voice & PTT, Notifications, Appearance) ✅
+- [x] WebSocket manager ✅
 
 ---
 
-## Milestone: Frontend Auth
+## Milestone: Frontend Auth & Referral System
 
-- [x] Login page ✅
-- [x] Register page ✅
-- [x] Auth state management ✅
+- [x] Dark Glassmorphic Auth Page with Ambient Glow & Animated Tabs ✅
+- [x] Login page with input icons, password toggle & responsive feedback ✅
+- [x] Register page with Referral Invite Code mandatory enforcement ✅
+- [x] URL Query parameter referral code prefill (`?invite=PEAK-XXXX`) ✅
+- [x] Live Invite Code validation feedback indicator ✅
+- [x] Backend `internal/invite` store, handler & `/api/invites` REST API ✅
+- [x] First-user admin bootstrap exemption ✅
+- [x] Integration test suite for referral invite codes ✅
 - [ ] Avatar upload UI (deferred)
 
 ---
@@ -127,27 +133,44 @@
 - [x] Speaking indicator (Speaking ring & green dot) ✅
 - [x] Screen share UI (Quick action buttons & screen share state) ✅
 - [x] Voice controls (Mute, deafen, disconnect, direct click join) ✅
+- [x] Voice Channel Soundboard (Synthesizer, Web Audio SFX, custom sound uploads) ✅
+- [x] Real-time soundboard broadcasting over WebSocket ✅
+
+---
+
+## Milestone: Chat & Media Attachments
+
+- [x] Migration: 000016_add_message_attachments ✅
+- [x] POST /api/upload endpoint (Cloudinary + Local Disk fallback) ✅
+- [x] Message attachments JSON schema & database integration ✅
+- [x] Drag & Drop file upload target overlay ✅
+- [x] Composer attachment picker & pending attachments strip (10 MB cap) ✅
+- [x] Message list image rendering & responsive media grid ✅
+- [x] Fullscreen dark glassmorphic Image Lightbox Modal with zoom & download ✅
+- [x] Non-image document & audio/video attachments rendering ✅
 
 ---
 
 ## Milestone: Testing
 
-- [ ] Auth handler tests
-- [ ] Message handler tests
-- [ ] Voice handler tests
-- [ ] Race detection (go test -race)
-- [ ] Memory profiling
-- [ ] Integration tests
+- [x] Auth handler & JWT tests ✅
+- [x] Message & Channel handler tests ✅
+- [x] Voice & SFU engine handler tests ✅
+- [x] Moderation & Role permissions tests ✅
+- [x] API Integration & multipart upload tests ✅
+- [x] Frontend TypeScript & Vite bundle validation ✅
+- [ ] Memory profiling & load testing (deferred)
 
 ---
 
 ## Milestone: Deployment
 
-- [ ] Docker Compose for coturn
-- [ ] Cloudflare Tunnel config
-- [ ] Let's Encrypt setup
-- [ ] systemd service
-- [ ] Database backup script
+- [x] Dockerfile & Docker Compose for Backend + coturn STUN/TURN ✅
+- [x] Cloudflare Tunnel configuration & Compose service ✅
+- [x] Reverse Proxy & SSL (Caddy Auto-SSL & Nginx templates) ✅
+- [x] systemd service unit with security hardening ✅
+- [x] SQLite WAL-Safe Online Backup & Restore scripts ✅
+- [x] Deployment guide & documentation ✅
 
 ---
 

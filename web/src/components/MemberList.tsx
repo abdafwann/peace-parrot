@@ -2,6 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Crown, Shield, Volume2, Search, Moon } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useVoiceStore } from '../stores/voiceStore'
+import { useWebSocketStore } from '../stores/websocketStore'
+import { useServerStore } from '../stores/serverStore'
+import { RoleBadge } from './RoleBadge'
 
 export interface Member {
   id: string
@@ -9,7 +12,7 @@ export interface Member {
   displayName?: string
   avatarUrl?: string
   bio?: string
-  role: 'Admin' | 'Moderator' | 'Member'
+  role: string
   status: 'online' | 'idle' | 'dnd' | 'offline'
   customStatus?: string
   activity?: string
@@ -38,23 +41,23 @@ const DEFAULT_MEMBERS: Member[] = [
     displayName: 'ParrotBot',
     role: 'Moderator',
     status: 'idle',
-    activity: 'Automating channels',
+    activity: 'Automated Moderation',
   },
   {
     id: 'user-1',
-    username: 'echo_user',
-    displayName: 'Echo',
+    username: 'sound_enthusiast',
+    displayName: 'EchoMaster',
     role: 'Member',
     status: 'online',
-    activity: 'Chilling in lobby',
+    activity: 'Testing SFU Audio',
   },
   {
     id: 'user-2',
-    username: 'alex',
-    displayName: 'Alex',
+    username: 'pixel_artist',
+    displayName: 'PixelCat',
     role: 'Member',
     status: 'dnd',
-    activity: 'Do Not Disturb',
+    activity: 'Drawing Badges',
   },
   {
     id: 'user-3',
@@ -69,48 +72,102 @@ export function MemberList() {
   const currentUser = useAuthStore((state) => state.user)
   const isInVoice = useVoiceStore((state) => state.channelId !== null)
   const participants = useVoiceStore((state) => state.participants)
-  const [members, setMembers] = useState<Member[]>(DEFAULT_MEMBERS)
+  const subscribe = useWebSocketStore((state) => state.subscribe)
+  const roles = useServerStore((state) => state.roles)
+  const fetchRoles = useServerStore((state) => state.fetchRoles)
+
+  const [rawUsers, setRawUsers] = useState<any[]>([])
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
 
-  // Fetch registered users from API and merge
+  // Initial fetch for roles
+  useEffect(() => {
+    fetchRoles()
+  }, [])
+
+  // Listen for real-time WebSocket presence & role updates
+  useEffect(() => {
+    const unsubscribe = subscribe((msg) => {
+      if (msg.type === 'presence_sync') {
+        const payload = (msg.payload || {}) as { onlineUserIds?: string[] }
+        if (Array.isArray(payload.onlineUserIds)) {
+          setOnlineUserIds(new Set(payload.onlineUserIds.map((id) => id.toLowerCase())))
+        }
+      } else if (msg.type === 'user_presence') {
+        const payload = (msg.payload || {}) as { userId?: string; username?: string; status?: string }
+        if (payload.userId) {
+          setOnlineUserIds((prev) => {
+            const next = new Set(prev)
+            const uId = payload.userId!.toLowerCase()
+            const uName = payload.username?.toLowerCase()
+            if (payload.status === 'online') {
+              next.add(uId)
+              if (uName) next.add(uName)
+            } else {
+              next.delete(uId)
+              if (uName) next.delete(uName)
+            }
+            return next
+          })
+        }
+      } else if (msg.type === 'user_role_updated') {
+        const payload = (msg.payload || {}) as { userId?: string; role?: string }
+        if (payload.userId && payload.role) {
+          setRawUsers((prev) =>
+            prev.map((u) => (u.id === payload.userId ? { ...u, role: payload.role } : u))
+          )
+        }
+      }
+    })
+    return () => unsubscribe()
+  }, [subscribe])
+
+  // Fetch registered users from API
   useEffect(() => {
     fetch('http://localhost:8080/api/users')
-      .then((res) => res.json())
+      .then((res) => (res.ok ? res.json() : []))
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
-          const apiMembers: Member[] = data.map((u: any, index: number) => {
-            let role: 'Admin' | 'Moderator' | 'Member' = 'Member'
-            if (index === 0 || u.username === 'afwan' || u.username === 'admin') role = 'Admin'
-            else if (index === 1 || u.username === 'mod') role = 'Moderator'
-
-            return {
-              id: u.id,
-              username: u.username,
-              displayName: u.displayName || u.username,
-              avatarUrl: u.avatarUrl,
-              bio: u.bio,
-              role,
-              status: 'online',
-              activity: u.bio || (role === 'Admin' ? 'Managing Server' : 'Online'),
-            }
-          })
-
-          // Combine with default extra demo members if list is small
-          const combined = [...apiMembers]
-          DEFAULT_MEMBERS.forEach((dm) => {
-            if (!combined.some((m) => m.username.toLowerCase() === dm.username.toLowerCase())) {
-              combined.push(dm)
-            }
-          })
-
-          setMembers(combined)
+          setRawUsers(data)
         }
       })
       .catch((err) => {
         console.error('Failed to fetch members:', err)
       })
-  }, [])
+  }, [currentUser])
+
+  // Calculate live members list based on real-time presence
+  const members = useMemo<Member[]>(() => {
+    if (!rawUsers || rawUsers.length === 0) return DEFAULT_MEMBERS
+
+    const currentId = currentUser?.id?.toLowerCase()
+    const currentName = currentUser?.username?.toLowerCase()
+
+    return rawUsers.map((u: any, index: number) => {
+      const username = u.username || u.Username || 'user'
+      const displayName = u.displayName || u.DisplayName || username
+      const id = u.id || u.ID || `user-${index}`
+      const lowerId = id.toLowerCase()
+      const lowerName = username.toLowerCase()
+
+      const isSelf = (currentId && lowerId === currentId) || (currentName && lowerName === currentName)
+      const isOnline = isSelf || onlineUserIds.has(lowerId) || onlineUserIds.has(lowerName)
+
+      let role: string = u.role || (index === 0 || lowerName === 'afwan' || lowerName === 'admin' ? 'Admin' : 'Member')
+
+      return {
+        id,
+        username,
+        displayName,
+        avatarUrl: u.avatarUrl || u.AvatarURL,
+        bio: u.bio || u.Bio,
+        role,
+        status: isOnline ? 'online' : 'offline',
+        activity: isOnline ? (role === 'Admin' ? 'Managing Server' : 'Online') : 'Offline',
+      }
+    })
+  }, [rawUsers, currentUser, onlineUserIds])
 
   // Filter members by search query
   const filteredMembers = useMemo(() => {
@@ -124,10 +181,49 @@ export function MemberList() {
     )
   }, [members, searchQuery])
 
-  // Group members by role / status
-  const admins = filteredMembers.filter((m) => m.role === 'Admin' && m.status !== 'offline')
-  const moderators = filteredMembers.filter((m) => m.role === 'Moderator' && m.status !== 'offline')
-  const onlineMembers = filteredMembers.filter((m) => m.role === 'Member' && m.status !== 'offline')
+  // Group online members dynamically by custom roles
+  const roleCategories = useMemo(() => {
+    const nonOffline = filteredMembers.filter((m) => m.status !== 'offline')
+    const grouped: { role: string; color?: string; iconUrl?: string; members: Member[] }[] = []
+
+    const knownRoles = roles.length > 0 ? roles : [
+      { id: 'role-admin', name: 'Admin', color: '#f0b232', iconUrl: '👑' },
+      { id: 'role-mod', name: 'Moderator', color: '#23a559', iconUrl: '🛡️' },
+      { id: 'role-member', name: 'Member', color: '#949ba4', iconUrl: '' },
+    ]
+
+    const handledUserIds = new Set<string>()
+
+    for (const r of knownRoles) {
+      if (r.name.toLowerCase() === 'member') continue
+      const roleMembers = nonOffline.filter(
+        (m) => m.role?.toLowerCase() === r.name.toLowerCase() && !handledUserIds.has(m.id)
+      )
+      if (roleMembers.length > 0) {
+        roleMembers.forEach((m) => handledUserIds.add(m.id))
+        grouped.push({
+          role: r.name,
+          color: r.color,
+          iconUrl: r.iconUrl,
+          members: roleMembers,
+        })
+      }
+    }
+
+    // Standard Online category
+    const standardOnline = nonOffline.filter((m) => !handledUserIds.has(m.id))
+    if (standardOnline.length > 0) {
+      grouped.push({
+        role: 'Online',
+        color: undefined,
+        iconUrl: undefined,
+        members: standardOnline,
+      })
+    }
+
+    return grouped
+  }, [filteredMembers, roles])
+
   const offlineMembers = filteredMembers.filter((m) => m.status === 'offline')
 
   return (
@@ -179,48 +275,20 @@ export function MemberList() {
 
       {/* Member Category List */}
       <div className="flex-1 overflow-y-auto p-2 space-y-4">
-        {/* Admins */}
-        {admins.length > 0 && (
+        {roleCategories.map((cat) => (
           <MemberCategory
-            title="Admin"
-            count={admins.length}
-            icon={<Crown size={12} className="text-[#f0b232] fill-[#f0b232]/20" />}
-            members={admins}
+            key={cat.role}
+            title={cat.role}
+            count={cat.members.length}
+            icon={<RoleBadge roleName={cat.role} />}
+            members={cat.members}
             currentUserId={currentUser?.id}
             currentUsername={currentUser?.username}
             isInVoice={isInVoice}
             participants={participants}
-            roleColor="#f0b232"
+            roleColor={cat.color}
           />
-        )}
-
-        {/* Moderators */}
-        {moderators.length > 0 && (
-          <MemberCategory
-            title="Moderator"
-            count={moderators.length}
-            icon={<Shield size={12} className="text-[#23a559]" />}
-            members={moderators}
-            currentUserId={currentUser?.id}
-            currentUsername={currentUser?.username}
-            isInVoice={isInVoice}
-            participants={participants}
-            roleColor="#23a559"
-          />
-        )}
-
-        {/* Online Members */}
-        {onlineMembers.length > 0 && (
-          <MemberCategory
-            title="Online"
-            count={onlineMembers.length}
-            members={onlineMembers}
-            currentUserId={currentUser?.id}
-            currentUsername={currentUser?.username}
-            isInVoice={isInVoice}
-            participants={participants}
-          />
-        )}
+        ))}
 
         {/* Offline Members */}
         {offlineMembers.length > 0 && (
@@ -296,7 +364,6 @@ function MemberCategory({
             <MemberItem
               key={member.id}
               member={member}
-              isCurrent={isCurrent}
               inVoice={inVoiceNow}
               roleColor={roleColor}
               isOffline={isOffline}
@@ -310,15 +377,19 @@ function MemberCategory({
 
 interface MemberItemProps {
   member: Member
-  isCurrent: boolean
   inVoice?: boolean
   roleColor?: string
   isOffline?: boolean
 }
 
-function MemberItem({ member, isCurrent, inVoice, roleColor, isOffline }: MemberItemProps) {
+function MemberItem({ member, inVoice, roleColor, isOffline }: MemberItemProps) {
   const displayName = member.displayName || member.username
   const initial = (displayName || 'U')[0].toUpperCase()
+
+  const roles = useServerStore((state) => state.roles)
+  const userRole = roles.find(
+    (r) => r.name?.toLowerCase() === member.role?.toLowerCase() || r.id === member.role
+  )
 
   return (
     <div
@@ -331,17 +402,23 @@ function MemberItem({ member, isCurrent, inVoice, roleColor, isOffline }: Member
       {/* Avatar with Status indicator */}
       <div className="relative shrink-0">
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shadow-sm"
+          className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shadow-sm overflow-hidden"
           style={{
             background:
-              member.role === 'Admin'
+              member.avatarUrl
+                ? 'transparent'
+                : member.role === 'Admin'
                 ? 'linear-gradient(135deg, #f0b232, #f59e0b)'
                 : member.role === 'Moderator'
                 ? 'linear-gradient(135deg, #23a559, var(--color-parrot-cyan))'
                 : 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))',
           }}
         >
-          {initial}
+          {member.avatarUrl ? (
+            <img src={member.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+          ) : (
+            initial
+          )}
         </div>
 
         {/* Status Dot */}
@@ -363,20 +440,21 @@ function MemberItem({ member, isCurrent, inVoice, roleColor, isOffline }: Member
         <div className="flex items-center gap-1">
           <span
             className="text-sm font-medium truncate"
-            style={{ color: roleColor || 'var(--color-text-primary)' }}
+            style={{ color: userRole?.color || roleColor || 'var(--color-text-primary)' }}
           >
             {displayName}
           </span>
-          {isCurrent && (
-            <span className="text-[10px] text-[var(--color-text-muted)] font-normal">
-              (you)
-            </span>
-          )}
-          {member.role === 'Admin' && (
-            <Crown size={12} className="text-[#f0b232] fill-[#f0b232]/20 shrink-0 ml-0.5" />
-          )}
-          {member.role === 'Moderator' && (
-            <Shield size={12} className="text-[#23a559] shrink-0 ml-0.5" />
+          {userRole?.iconUrl ? (
+            <RoleBadge role={userRole} />
+          ) : (
+            <>
+              {member.role === 'Admin' && (
+                <Crown size={12} className="text-[#f0b232] fill-[#f0b232]/20 shrink-0 ml-0.5" />
+              )}
+              {member.role === 'Moderator' && (
+                <Shield size={12} className="text-[#23a559] shrink-0 ml-0.5" />
+              )}
+            </>
           )}
         </div>
 

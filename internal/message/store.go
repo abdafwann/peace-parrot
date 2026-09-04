@@ -2,6 +2,7 @@ package message
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -32,16 +33,28 @@ func NewStore(db *database.DB) *Store {
 	return &Store{db: db}
 }
 
+// Attachment represents an uploaded media/file attached to a message
+type Attachment struct {
+	ID       string `json:"id"`
+	URL      string `json:"url"`
+	Filename string `json:"filename"`
+	Size     int64  `json:"size"`
+	Type     string `json:"type"` // "image", "video", "audio", "file"
+	MimeType string `json:"mimeType"`
+}
+
 // Message represents a message in the database
 type Message struct {
-	ID         string
-	ChannelID  string
-	AuthorID   string
-	AuthorName string
-	Content    string
-	CreatedAt  time.Time
-	EditedAt   *time.Time
-	DeletedAt  *time.Time
+	ID              string
+	ChannelID       string
+	AuthorID        string
+	AuthorName      string
+	AuthorAvatarURL string
+	Content         string
+	Attachments     []Attachment
+	CreatedAt       time.Time
+	EditedAt        *time.Time
+	DeletedAt       *time.Time
 }
 
 // CreateMessage creates a new message
@@ -49,12 +62,19 @@ func (s *Store) CreateMessage(msg *Message) error {
 	if msg.ID == "" {
 		msg.ID = uuid.New().String()
 	}
-	now := time.Now()
+	now := time.Now().UTC()
 	msg.CreatedAt = now
 
+	attachmentsJSON := "[]"
+	if len(msg.Attachments) > 0 {
+		if bytes, err := json.Marshal(msg.Attachments); err == nil {
+			attachmentsJSON = string(bytes)
+		}
+	}
+
 	query := `
-		INSERT INTO messages (id, channel_id, author_id, content, created_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO messages (id, channel_id, author_id, content, attachments, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := s.db.Exec(query,
@@ -62,6 +82,7 @@ func (s *Store) CreateMessage(msg *Message) error {
 		msg.ChannelID,
 		msg.AuthorID,
 		msg.Content,
+		attachmentsJSON,
 		msg.CreatedAt,
 	)
 	return err
@@ -70,17 +91,23 @@ func (s *Store) CreateMessage(msg *Message) error {
 // GetMessageByID retrieves a message by ID
 func (s *Store) GetMessageByID(id string) (*Message, error) {
 	query := `
-		SELECT id, channel_id, author_id, content, created_at, edited_at, deleted_at
-		FROM messages WHERE id = ?
+		SELECT m.id, m.channel_id, m.author_id, COALESCE(u.display_name, u.username, 'User'), COALESCE(u.avatar_url, ''), m.content, COALESCE(m.attachments, '[]'), m.created_at, m.edited_at, m.deleted_at
+		FROM messages m
+		LEFT JOIN users u ON m.author_id = u.id
+		WHERE m.id = ?
 	`
 
 	msg := &Message{}
 	var editedAt, deletedAt sql.NullTime
+	var attachmentsJSON string
 	err := s.db.QueryRow(query, id).Scan(
 		&msg.ID,
 		&msg.ChannelID,
 		&msg.AuthorID,
+		&msg.AuthorName,
+		&msg.AuthorAvatarURL,
 		&msg.Content,
+		&attachmentsJSON,
 		&msg.CreatedAt,
 		&editedAt,
 		&deletedAt,
@@ -92,6 +119,8 @@ func (s *Store) GetMessageByID(id string) (*Message, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	_ = json.Unmarshal([]byte(attachmentsJSON), &msg.Attachments)
 
 	if editedAt.Valid {
 		msg.EditedAt = &editedAt.Time
@@ -117,7 +146,7 @@ func (s *Store) ListMessagesByChannel(channelID string, beforeID string, limit i
 
 	if beforeID != "" {
 		query = `
-			SELECT m.id, m.channel_id, m.author_id, COALESCE(u.username, 'User'), m.content, m.created_at, m.edited_at, m.deleted_at
+			SELECT m.id, m.channel_id, m.author_id, COALESCE(u.display_name, u.username, 'User'), COALESCE(u.avatar_url, ''), m.content, COALESCE(m.attachments, '[]'), m.created_at, m.edited_at, m.deleted_at
 			FROM messages m
 			LEFT JOIN users u ON m.author_id = u.id
 			WHERE m.channel_id = ? AND m.id < ?
@@ -127,7 +156,7 @@ func (s *Store) ListMessagesByChannel(channelID string, beforeID string, limit i
 		args = []interface{}{channelID, beforeID, limit}
 	} else {
 		query = `
-			SELECT m.id, m.channel_id, m.author_id, COALESCE(u.username, 'User'), m.content, m.created_at, m.edited_at, m.deleted_at
+			SELECT m.id, m.channel_id, m.author_id, COALESCE(u.display_name, u.username, 'User'), COALESCE(u.avatar_url, ''), m.content, COALESCE(m.attachments, '[]'), m.created_at, m.edited_at, m.deleted_at
 			FROM messages m
 			LEFT JOIN users u ON m.author_id = u.id
 			WHERE m.channel_id = ?
@@ -147,18 +176,22 @@ func (s *Store) ListMessagesByChannel(channelID string, beforeID string, limit i
 	for rows.Next() {
 		msg := &Message{}
 		var editedAt, deletedAt sql.NullTime
+		var attachmentsJSON string
 		if err := rows.Scan(
 			&msg.ID,
 			&msg.ChannelID,
 			&msg.AuthorID,
 			&msg.AuthorName,
+			&msg.AuthorAvatarURL,
 			&msg.Content,
+			&attachmentsJSON,
 			&msg.CreatedAt,
 			&editedAt,
 			&deletedAt,
 		); err != nil {
 			return nil, err
 		}
+		_ = json.Unmarshal([]byte(attachmentsJSON), &msg.Attachments)
 		if editedAt.Valid {
 			msg.EditedAt = &editedAt.Time
 		}

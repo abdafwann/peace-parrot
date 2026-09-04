@@ -1,9 +1,11 @@
 package auth
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
+	"github.com/abdafwann/peace-parrot/internal/invite"
 	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
@@ -12,9 +14,10 @@ import (
 
 // AuthHandler handles authentication endpoints
 type AuthHandler struct {
-	userStore *user.Store
-	jwtMgr    *JWTManager
-	rateLimit *RateLimiter
+	userStore   *user.Store
+	inviteStore *invite.Store
+	jwtMgr      *JWTManager
+	rateLimit   *RateLimiter
 }
 
 // LoginRequest represents login request body
@@ -38,11 +41,12 @@ type AuthResponse struct {
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(store *user.Store, jwtMgr *JWTManager) *AuthHandler {
+func NewAuthHandler(store *user.Store, inviteStore *invite.Store, jwtMgr *JWTManager) *AuthHandler {
 	return &AuthHandler{
-		userStore: store,
-		jwtMgr:    jwtMgr,
-		rateLimit: NewRateLimiter(DefaultRateLimit, DefaultRateWindow),
+		userStore:   store,
+		inviteStore: inviteStore,
+		jwtMgr:      jwtMgr,
+		rateLimit:   NewRateLimiter(DefaultRateLimit, DefaultRateWindow),
 	}
 }
 
@@ -101,6 +105,7 @@ func (h *AuthHandler) Register(c echo.Context) error {
 	req.Username = strings.TrimSpace(strings.ToLower(req.Username))
 	req.Password = strings.TrimSpace(req.Password)
 	req.DisplayName = strings.TrimSpace(req.DisplayName)
+	req.InviteCode = strings.TrimSpace(strings.ToUpper(req.InviteCode))
 
 	// Validate username
 	if err := ValidateUsername(req.Username); err != nil {
@@ -112,10 +117,34 @@ func (h *AuthHandler) Register(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusBadRequest, "PASSWORD_TOO_WEAK", err.Error(), nil)
 	}
 
-	// TODO: Validate invite code
-	// if req.InviteCode == "" {
-	//     return middleware.WriteError(c, http.StatusBadRequest, "INVITE_REQUIRED", "Invite code is required", nil)
-	// }
+	// Check if this is the first user (Admin setup / bootstrap)
+	userCount, err := h.userStore.CountUsers()
+	if err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to check user count", nil)
+	}
+
+	// If not the first user, referral invite code is mandatory
+	if userCount > 0 {
+		if req.InviteCode == "" {
+			return middleware.WriteError(c, http.StatusBadRequest, "INVITE_REQUIRED", "Referral invite code is required to register", nil)
+		}
+
+		if h.inviteStore != nil {
+			_, err := h.inviteStore.ValidateCode(req.InviteCode)
+			if err != nil {
+				if errors.Is(err, invite.ErrInviteNotFound) {
+					return middleware.WriteError(c, http.StatusBadRequest, "INVITE_NOT_FOUND", "Invite code is invalid", nil)
+				}
+				if errors.Is(err, invite.ErrInviteUsed) {
+					return middleware.WriteError(c, http.StatusBadRequest, "INVITE_USED", "This invite code has already been used", nil)
+				}
+				if errors.Is(err, invite.ErrInviteExpired) {
+					return middleware.WriteError(c, http.StatusBadRequest, "INVITE_EXPIRED", "This invite code has expired", nil)
+				}
+				return middleware.WriteError(c, http.StatusBadRequest, "INVALID_INVITE", err.Error(), nil)
+			}
+		}
+	}
 
 	// Check if username exists
 	existing, _ := h.userStore.GetUserByUsername(req.Username)
@@ -138,6 +167,11 @@ func (h *AuthHandler) Register(c echo.Context) error {
 
 	if err := h.userStore.CreateUser(newUser); err != nil {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to create user", nil)
+	}
+
+	// Mark invite code as used if provided
+	if userCount > 0 && req.InviteCode != "" && h.inviteStore != nil {
+		_ = h.inviteStore.MarkUsed(req.InviteCode, newUser.ID)
 	}
 
 	// Generate token

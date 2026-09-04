@@ -4,7 +4,6 @@ import { LoginForm, RegisterForm } from './components/AuthForms'
 import { MessageList } from './components/MessageList'
 import { MessageComposer } from './components/MessageComposer'
 import { TypingIndicator } from './components/TypingIndicator'
-import { VoicePanel } from './components/VoicePanel'
 import { useAuthStore } from './stores/authStore'
 import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
@@ -38,55 +37,109 @@ function ThemeToggle() {
 }
 
 function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) {
+  const [urlInviteCode, setUrlInviteCode] = useState('')
+
+  // Check URL params for invite code e.g. ?invite=PEAK-XXXX
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get('invite') || params.get('code')
+      if (code) {
+        setUrlInviteCode(code.toUpperCase())
+        if (mode !== 'register') {
+          onSwitch()
+        }
+      }
+    } catch {
+      // Ignore URL parsing failure
+    }
+  }, [mode, onSwitch])
+
   return (
-    <div className="h-full flex items-center justify-center relative" style={{ background: 'linear-gradient(135deg, var(--color-bg-primary) 0%, var(--color-bg-secondary) 100%)' }}>
+    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0d14] p-4 select-none">
+      {/* Dynamic Ambient Background Glow Elements */}
+      <div className="absolute -top-40 -left-40 w-96 h-96 rounded-full bg-emerald-500/15 blur-[120px] pointer-events-none animate-pulse" />
+      <div className="absolute -bottom-40 -right-40 w-96 h-96 rounded-full bg-sky-500/15 blur-[120px] pointer-events-none animate-pulse" style={{ animationDelay: '2s' }} />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full bg-indigo-500/10 blur-[150px] pointer-events-none" />
+
+      {/* Grid Pattern Overlay */}
+      <div
+        className="absolute inset-0 opacity-[0.03] pointer-events-none"
+        style={{
+          backgroundImage: 'radial-gradient(rgba(255, 255, 255, 0.8) 1px, transparent 1px)',
+          backgroundSize: '24px 24px',
+        }}
+      />
+
       <ThemeToggle />
 
-      <div className="w-full max-w-md p-8 animate-fade-in-up">
-        {/* Logo & Branding */}
-        <div className="text-center mb-10">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-[var(--color-brand)] to-[var(--color-parrot-green)] flex items-center justify-center shadow-lg animate-float">
-            <Bird size={40} className="text-white" />
+      <div className="w-full max-w-[440px] relative z-10 animate-fade-in-up">
+        {/* Branding & Logo */}
+        <div className="text-center mb-6">
+          <div className="relative inline-block mb-3">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-tr from-emerald-500 via-[var(--color-brand)] to-cyan-400 p-[2px] shadow-xl shadow-emerald-500/20">
+              <div className="w-full h-full rounded-[14px] bg-[#0e131f] flex items-center justify-center">
+                <Bird size={32} className="text-emerald-400 animate-float" />
+              </div>
+            </div>
+            <div className="absolute -bottom-1 -right-1 px-1.5 py-0.5 rounded-full bg-emerald-500 text-[9px] font-extrabold text-black uppercase tracking-wider shadow">
+              PRO
+            </div>
           </div>
-          <h1 className="text-3xl font-bold text-[var(--color-text-primary)] mb-2">PeaceParrot</h1>
-          <p className="text-[var(--color-text-secondary)]">
-            {mode === 'login' ? 'Welcome back! Ready to chat?' : 'Join the flock 🦜'}
+          <h1 className="text-2xl font-bold tracking-tight text-white mb-1">
+            Roompeak
+          </h1>
+          <p className="text-xs font-medium text-slate-400">
+            {mode === 'login' ? 'Sign in to access your voice channels & communities' : 'Enter your invite code to join the platform'}
           </p>
         </div>
 
-        {/* Auth Form Card */}
-        <div className="rounded-2xl p-8 animate-fade-in-scale" style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border-default)' }}>
-          {mode === 'login' ? (
-            <LoginForm onSuccess={() => window.location.reload()} />
-          ) : (
-            <RegisterForm onSuccess={() => window.location.reload()} />
-          )}
+        {/* Glassmorphic Card */}
+        <div className="rounded-3xl p-6 sm:p-8 backdrop-blur-2xl bg-[#111625]/80 border border-white/10 shadow-2xl shadow-black/60 relative overflow-hidden">
+          {/* Inner Top Highlight */}
+          <div className="absolute top-0 left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-emerald-400/40 to-transparent" />
 
-          <div className="mt-6 pt-6 text-center" style={{ borderTop: '1px solid var(--color-border-default)' }}>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              {mode === 'login' ? (
-                <>
-                  New to PeaceParrot?{' '}
-                  <button type="button" onClick={onSwitch} className="font-medium hover:underline" style={{ color: 'var(--color-brand)' }}>
-                    Create an account
-                  </button>
-                </>
-              ) : (
-                <>
-                  Already have an account?{' '}
-                  <button type="button" onClick={onSwitch} className="font-medium hover:underline" style={{ color: 'var(--color-brand)' }}>
-                    Sign in
-                  </button>
-                </>
-              )}
-            </p>
+          {/* Mode Switcher Tabs */}
+          <div className="grid grid-cols-2 p-1 mb-6 rounded-xl bg-white/[0.04] border border-white/5">
+            <button
+              type="button"
+              onClick={() => mode !== 'login' && onSwitch()}
+              className={`py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer ${
+                mode === 'login'
+                  ? 'bg-gradient-to-r from-emerald-500/20 to-sky-500/20 text-white shadow-sm border border-emerald-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Sign In
+            </button>
+            <button
+              type="button"
+              onClick={() => mode !== 'register' && onSwitch()}
+              className={`py-2 rounded-lg text-xs font-semibold tracking-wide transition-all duration-200 cursor-pointer ${
+                mode === 'register'
+                  ? 'bg-gradient-to-r from-emerald-500/20 to-sky-500/20 text-white shadow-sm border border-emerald-500/30'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              Create Account
+            </button>
           </div>
+
+          {/* Form Content */}
+          {mode === 'login' ? (
+            <LoginForm />
+          ) : (
+            <RegisterForm initialInviteCode={urlInviteCode} />
+          )}
         </div>
 
-        {/* Footer tagline */}
-        <p className="text-center mt-8 text-xs text-[var(--color-text-muted)]">
-          ✨ Where conversations feel like home
-        </p>
+        {/* Footer info */}
+        <div className="text-center mt-6 space-y-1">
+          <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5 font-medium">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            End-to-end encrypted voice & real-time chat
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -97,10 +150,11 @@ function ChatPage() {
   useSFU()
 
   const setChannels = useChannelStore((state) => state.setChannels)
-  const activeChannelId = useChannelStore((state) => state.activeChannelId)
-  const activeChannel = useChannelStore((state) => {
+  const activeTextChannel = useChannelStore((state) => {
     const id = state.activeChannelId
-    return state.channels.find(c => c.id === id)
+    const found = state.channels.find((c) => c.id === id)
+    if (found && found.type === 'text') return found
+    return state.channels.find((c) => c.type === 'text')
   })
   const { theme } = useThemeStore()
 
@@ -122,6 +176,29 @@ function ChatPage() {
     }
   }, [token, isConnected, connect])
 
+  // Fetch and refresh current user profile on mount
+  useEffect(() => {
+    if (token) {
+      fetch('http://localhost:8080/api/users/me', {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+        .then((res) => {
+          if (res.status === 401) {
+            console.warn('[App] Session expired or invalid (401). Logging out.')
+            useAuthStore.getState().logout()
+            return null
+          }
+          return res.ok ? res.json() : null
+        })
+        .then((data) => {
+          if (data) {
+            useAuthStore.getState().setUser(data)
+          }
+        })
+        .catch((err) => console.log('[App] /api/users/me fetch error:', err))
+    }
+  }, [token])
+
   // Fetch channels on mount
   useEffect(() => {
     fetch('http://localhost:8080/api/channels')
@@ -129,9 +206,10 @@ function ChatPage() {
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {
           setChannels(data)
-          // Auto-select first channel if none selected
+          // Auto-select first text channel if none selected
           if (!useChannelStore.getState().activeChannelId) {
-            useChannelStore.getState().setActiveChannel(data[0].id)
+            const firstText = data.find((c: any) => c.type === 'text') || data[0]
+            useChannelStore.getState().setActiveChannel(firstText.id)
           }
         } else {
           // Fallback demo channels
@@ -172,17 +250,15 @@ function ChatPage() {
         className="h-12 px-4 flex items-center gap-3 shrink-0"
         style={{ borderBottom: '1px solid var(--color-border-default)' }}
       >
-        <span className={`text-lg ${activeChannel?.type === 'voice' ? 'text-[var(--color-parrot-green)]' : 'text-[var(--color-text-secondary)]'}`}>
-          {activeChannel?.type === 'voice' ? '🔊' : '#'}
-        </span>
+        <span className="text-lg text-[var(--color-text-secondary)]">#</span>
         <h2 className="font-semibold text-[var(--color-text-primary)]">
-          {activeChannel?.name || 'general'}
+          {activeTextChannel?.name || 'general'}
         </h2>
-        {activeChannel?.topic && (
+        {activeTextChannel?.topic && (
           <>
             <span className="w-px h-4 bg-[var(--color-border-default)]" />
             <p className="text-sm text-[var(--color-text-muted)] truncate flex-1">
-              {activeChannel.topic}
+              {activeTextChannel.topic}
             </p>
           </>
         )}
@@ -207,48 +283,40 @@ function ChatPage() {
         </div>
       </div>
 
-      {/* Messages and composer - only show for text channels */}
-      {activeChannelId ? (
+      {/* Messages and composer */}
+      {activeTextChannel ? (
         <>
-          {activeChannel?.type === 'text' ? (
-            <>
-              <MessageList />
-              <TypingIndicator channelId={activeChannelId} />
-              <MessageComposer />
-            </>
-          ) : activeChannel?.type === 'voice' ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-[var(--color-text-muted)]">
-              <Bird size={64} className="mb-4 animate-float opacity-30" />
-              <p className="text-xl mb-2">Voice Channel</p>
-              <p className="text-sm">Select a text channel to chat</p>
-            </div>
-          ) : null}
+          <MessageList />
+          <TypingIndicator channelId={activeTextChannel.id} />
+          <MessageComposer />
         </>
       ) : (
         <div className="flex-1 flex flex-col items-center justify-center text-[var(--color-text-muted)]">
           <Bird size={64} className="mb-4 animate-float opacity-30" />
           <p className="text-xl mb-2">Welcome to PeaceParrot!</p>
-          <p className="text-sm">Select a channel from the sidebar to start chatting</p>
+          <p className="text-sm">Select a text channel from the sidebar to start chatting</p>
         </div>
       )}
-
-      {/* Voice Panel - collapsible, shown when in voice */}
-      <VoicePanel />
     </>
   )
 }
+
+import { ToastContainer } from './components/ToastContainer'
 
 export default function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
 
-  if (!isAuthenticated) {
-    return <AuthPage mode={authMode} onSwitch={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} />
-  }
-
   return (
-    <Layout>
-      <ChatPage />
-    </Layout>
+    <>
+      <ToastContainer />
+      {!isAuthenticated ? (
+        <AuthPage mode={authMode} onSwitch={() => setAuthMode(authMode === 'login' ? 'register' : 'login')} />
+      ) : (
+        <Layout>
+          <ChatPage />
+        </Layout>
+      )}
+    </>
   )
 }

@@ -1,0 +1,34 @@
+# Caddyfile for Roompeak (Automatic Let's Encrypt SSL & WebSocket Proxy)
+{
+    email admin@yourdomain.com
+}
+
+api.yourdomain.com {
+    # WebSocket & REST API Reverse Proxy
+    reverse_proxy app:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Security Headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Max upload limit (15MB)
+    request_body {
+        max_size 15MB
+    }
+
+    log {
+        output file /var/log/caddy/roompeak_api.log {
+            roll_size 10MB
+            roll_keep 5
+        }
+    }
+}

@@ -164,6 +164,7 @@ export function useSpeakingDetection(
 
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useAuthStore } from '../stores/authStore'
+import { playSoundEffect } from '../utils/soundEffects'
 
 export function useVoiceCleanup() {
   const voiceRef = useVoiceRef()
@@ -171,6 +172,7 @@ export function useVoiceCleanup() {
   const user = useAuthStore((state) => state.user)
 
   const leaveChannel = useCallback(() => {
+    playSoundEffect('leave')
     const activeChanId = useVoiceStore.getState().channelId
     if (activeChanId) {
       useWebSocketStore.getState().send({
