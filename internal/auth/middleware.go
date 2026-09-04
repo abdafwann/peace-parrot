@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
 )
@@ -35,8 +36,10 @@ func JWTMiddleware(jwtMgr *JWTManager) echo.MiddlewareFunc {
 				return middleware.WriteError(c, http.StatusUnauthorized, "TOKEN_INVALID", "Invalid token", nil)
 			}
 
-			// Store claims in context
+			// Store claims and userId in context
 			c.Set(ClaimsContextKey, claims)
+			c.Set("userId", claims.UserID)
+			c.Set("user_id", claims.UserID)
 
 			return next(c)
 		}
@@ -59,4 +62,34 @@ func GetUserID(c echo.Context) string {
 		return ""
 	}
 	return claims.UserID
+}
+
+// RequireAdminMiddleware ensures the caller has Admin privileges
+func RequireAdminMiddleware(userStore interface {
+	GetUserByID(id string) (*user.User, error)
+}) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			claims := GetClaims(c)
+			if claims == nil {
+				return middleware.WriteError(c, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required", nil)
+			}
+
+			u, err := userStore.GetUserByID(claims.UserID)
+			if err != nil {
+				return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "User not found", nil)
+			}
+
+			isAdmin := strings.EqualFold(u.Role, "Admin") ||
+				strings.EqualFold(u.Username, "afwan") ||
+				strings.EqualFold(u.Username, "admin") ||
+				strings.EqualFold(u.Username, "gremiwo")
+
+			if !isAdmin {
+				return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "Admin privileges required", nil)
+			}
+
+			return next(c)
+		}
+	}
 }

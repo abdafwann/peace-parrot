@@ -1,0 +1,32 @@
+[Unit]
+Description=Roompeak Real-time Chat & Voice Backend Service
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=roompeak
+Group=roompeak
+WorkingDirectory=/opt/roompeak
+ExecStart=/opt/roompeak/server
+Restart=always
+RestartSec=5s
+
+# Environment Variables
+EnvironmentFile=/opt/roompeak/.env
+Environment=GIN_MODE=release
+
+# Security hardening
+LimitNOFILE=65536
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+NoNewPrivileges=true
+
+# Standard logs to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=roompeak
+
+[Install]
+WantedBy=multi-user.target

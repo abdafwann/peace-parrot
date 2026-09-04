@@ -8,6 +8,8 @@ import (
 // VoiceParticipant represents a user in a voice session
 type VoiceParticipant struct {
 	UserID          string    `json:"user_id"`
+	Username        string    `json:"username,omitempty"`
+	DisplayName     string    `json:"display_name,omitempty"`
 	SelfMuted       bool      `json:"self_muted"`
 	ServerMuted     bool      `json:"server_muted"`
 	Deafened        bool      `json:"deafened"`
@@ -22,9 +24,9 @@ func (p *VoiceParticipant) CanSpeak() bool {
 
 // VoiceSession represents a voice channel session
 type VoiceSession struct {
-	ChannelID     string                     `json:"channel_id"`
-	Participants   map[string]*VoiceParticipant `json:"participants"`
-	mu             sync.RWMutex
+	ChannelID    string                       `json:"channel_id"`
+	Participants map[string]*VoiceParticipant `json:"participants"`
+	mu           sync.RWMutex
 }
 
 // VoiceSessionManager manages all voice sessions
@@ -59,6 +61,11 @@ func (m *VoiceSessionManager) GetOrCreateSession(channelID string) *VoiceSession
 
 // Join adds a participant to a voice session
 func (m *VoiceSessionManager) Join(channelID, userID string) *VoiceParticipant {
+	return m.JoinWithUser(channelID, userID, "", "")
+}
+
+// JoinWithUser adds a participant with username/displayName to a voice session
+func (m *VoiceSessionManager) JoinWithUser(channelID, userID, username, displayName string) *VoiceParticipant {
 	session := m.GetOrCreateSession(channelID)
 
 	session.mu.Lock()
@@ -66,12 +73,20 @@ func (m *VoiceSessionManager) Join(channelID, userID string) *VoiceParticipant {
 
 	// Check if already in session
 	if existing, exists := session.Participants[userID]; exists {
+		if username != "" {
+			existing.Username = username
+		}
+		if displayName != "" {
+			existing.DisplayName = displayName
+		}
 		return existing
 	}
 
 	participant := &VoiceParticipant{
-		UserID:   userID,
-		JoinedAt: time.Now(),
+		UserID:      userID,
+		Username:    username,
+		DisplayName: displayName,
+		JoinedAt:    time.Now(),
 	}
 	session.Participants[userID] = participant
 	return participant
@@ -255,4 +270,16 @@ func (m *VoiceSessionManager) SetScreenSharing(channelID, userID string, sharing
 
 	participant.IsScreenSharing = sharing
 	return participant, true
+}
+
+// GetAllSessions returns a snapshot of all active voice sessions
+func (m *VoiceSessionManager) GetAllSessions() []*VoiceSession {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	sessions := make([]*VoiceSession, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		sessions = append(sessions, s)
+	}
+	return sessions
 }

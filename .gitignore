@@ -40,3 +40,13 @@ build/
 # Tauri
 web/src-tauri/target/
 web/node_modules/
+
+# Uploaded media
+uploads/
+web/dist/
+
+# Temp and Agent files
+*~
+*.bak
+.claude/
+web/.claude/

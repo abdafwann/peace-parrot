@@ -3,13 +3,14 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all application configuration
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
-	JWT      JWTConfig
+	Server     ServerConfig
+	Database   DatabaseConfig
+	JWT        JWTConfig
 	Cloudinary CloudinaryConfig
 }
 
@@ -39,8 +40,35 @@ type CloudinaryConfig struct {
 	APISecret string
 }
 
-// Load reads configuration from environment variables
+// loadDotEnv loads environment variables from a .env file if it exists
+func loadDotEnv(filename string) {
+	data, err := os.ReadFile(filename)
+	if err != nil {
+		return
+	}
+
+	lines := strings.Split(string(data), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			key := strings.TrimSpace(parts[0])
+			val := strings.TrimSpace(parts[1])
+			val = strings.Trim(val, `"'`)
+			if key != "" && os.Getenv(key) == "" {
+				_ = os.Setenv(key, val)
+			}
+		}
+	}
+}
+
+// Load reads configuration from environment variables (loading .env if present)
 func Load() *Config {
+	loadDotEnv(".env")
+
 	return &Config{
 		Server: ServerConfig{
 			Port:         getEnv("SERVER_PORT", "8080"),

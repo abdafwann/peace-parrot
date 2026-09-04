@@ -6,7 +6,9 @@ export interface User {
   username: string
   displayName?: string
   avatarUrl?: string
+  bannerUrl?: string
   bio?: string
+  role?: string
 }
 
 export interface AuthState {
@@ -27,11 +29,45 @@ export const useAuthStore = create<AuthState>()(
       token: null,
       isAuthenticated: false,
 
-      login: (user, token) => set({ user, token, isAuthenticated: true }),
+      login: (rawUser, token) => {
+        const u: User = {
+          id: (rawUser as any)?.id || (rawUser as any)?.ID || '',
+          username: (rawUser as any)?.username || (rawUser as any)?.Username || '',
+          displayName:
+            (rawUser as any)?.displayName ||
+            (rawUser as any)?.DisplayName ||
+            (rawUser as any)?.username ||
+            (rawUser as any)?.Username ||
+            'User',
+          avatarUrl: (rawUser as any)?.avatarUrl || (rawUser as any)?.AvatarURL,
+          bannerUrl: (rawUser as any)?.bannerUrl || (rawUser as any)?.BannerURL,
+          bio: (rawUser as any)?.bio || (rawUser as any)?.Bio,
+          role: (rawUser as any)?.role || (rawUser as any)?.Role || 'Member',
+        }
+        set({ user: u, token, isAuthenticated: true })
+      },
 
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+      logout: () => {
+        set({ user: null, token: null, isAuthenticated: false })
+      },
 
-      setUser: (user) => set({ user }),
+      setUser: (rawUser) => {
+        const u: User = {
+          id: (rawUser as any)?.id || (rawUser as any)?.ID || '',
+          username: (rawUser as any)?.username || (rawUser as any)?.Username || '',
+          displayName:
+            (rawUser as any)?.displayName ||
+            (rawUser as any)?.DisplayName ||
+            (rawUser as any)?.username ||
+            (rawUser as any)?.Username ||
+            'User',
+          avatarUrl: (rawUser as any)?.avatarUrl || (rawUser as any)?.AvatarURL,
+          bannerUrl: (rawUser as any)?.bannerUrl || (rawUser as any)?.BannerURL,
+          bio: (rawUser as any)?.bio || (rawUser as any)?.Bio,
+          role: (rawUser as any)?.role || (rawUser as any)?.Role || 'Member',
+        }
+        set({ user: u })
+      },
     }),
     {
       name: 'peace-parrot-auth',

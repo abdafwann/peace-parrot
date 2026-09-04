@@ -12,18 +12,27 @@ import (
 type Client struct {
 	ID       string
 	UserID   string
+	Username string
 	Conn     *websocket.Conn
 	Channels map[string]bool // subscribed channels
+	writeMu  sync.Mutex
 	mu       sync.RWMutex
+}
+
+// SendJSON writes JSON to the client safely with mutex lock
+func (c *Client) SendJSON(v interface{}) error {
+	c.writeMu.Lock()
+	defer c.writeMu.Unlock()
+	return c.Conn.WriteJSON(v)
 }
 
 // Hub manages all WebSocket connections
 type Hub struct {
-	clients   map[string]*Client
-	register  chan *Client
+	clients    map[string]*Client
+	register   chan *Client
 	unregister chan *Client
-	broadcast chan *Message
-	mu        sync.RWMutex
+	broadcast  chan *Message
+	mu         sync.RWMutex
 
 	// Event handlers
 	voiceHandler VoiceHandler
@@ -31,7 +40,7 @@ type Hub struct {
 
 // VoiceHandler interface for voice events
 type VoiceHandler interface {
-	HandleVoiceJoin(userID string, payload []byte) (interface{}, error)
+	HandleVoiceJoin(userID, username string, payload []byte) (interface{}, error)
 	HandleVoiceLeave(userID string, payload []byte) error
 	HandleVoiceStateUpdate(userID string, payload []byte) error
 	HandleSpeaking(userID string, payload []byte) error
@@ -54,9 +63,42 @@ func NewHub() *Hub {
 	}
 }
 
+// PresencePayload represents a presence update event
+type PresencePayload struct {
+	UserID   string `json:"userId"`
+	Username string `json:"username,omitempty"`
+	Status   string `json:"status"` // "online" or "offline"
+}
+
+// PresenceSyncPayload represents initial online users snapshot
+type PresenceSyncPayload struct {
+	OnlineUserIDs []string `json:"onlineUserIds"`
+}
+
 // SetVoiceHandler sets the voice handler
 func (h *Hub) SetVoiceHandler(handler VoiceHandler) {
 	h.voiceHandler = handler
+}
+
+func (h *Hub) getOnlineUserIDsLocked() []string {
+	userSet := make(map[string]bool)
+	for _, c := range h.clients {
+		if c.UserID != "" {
+			userSet[c.UserID] = true
+		}
+	}
+	ids := make([]string, 0, len(userSet))
+	for id := range userSet {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
+// GetOnlineUserIDs returns list of unique user IDs currently connected
+func (h *Hub) GetOnlineUserIDs() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.getOnlineUserIDsLocked()
 }
 
 // Run starts the hub
@@ -66,8 +108,22 @@ func (h *Hub) Run() {
 		case client := <-h.register:
 			h.mu.Lock()
 			h.clients[client.ID] = client
+			onlineIDs := h.getOnlineUserIDsLocked()
 			h.mu.Unlock()
 			log.Printf("WebSocket: Client %s connected (user: %s)", client.ID, client.UserID)
+
+			// Send presence snapshot to newly joined client
+			_ = client.SendJSON(Message{
+				Type:    "presence_sync",
+				Payload: MustMarshal(PresenceSyncPayload{OnlineUserIDs: onlineIDs}),
+			})
+
+			// Broadcast presence to all other clients
+			h.BroadcastAll("user_presence", PresencePayload{
+				UserID:   client.UserID,
+				Username: client.Username,
+				Status:   "online",
+			})
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -75,15 +131,36 @@ func (h *Hub) Run() {
 				delete(h.clients, client.ID)
 				client.Conn.Close()
 				log.Printf("WebSocket: Client %s disconnected", client.ID)
+
+				// Check if user has no remaining active connections
+				userID := client.UserID
+				hasOtherConnections := false
+				for _, c := range h.clients {
+					if c.UserID == userID {
+						hasOtherConnections = true
+						break
+					}
+				}
+				h.mu.Unlock()
+
+				if !hasOtherConnections && userID != "" {
+					h.BroadcastAll("user_presence", PresencePayload{
+						UserID:   userID,
+						Username: client.Username,
+						Status:   "offline",
+					})
+				}
+			} else {
+				h.mu.Unlock()
 			}
-			h.mu.Unlock()
 
 		case message := <-h.broadcast:
+			log.Printf("[Hub] Received broadcast message type=%s channel=%s", message.Type, message.ChannelID)
 			h.mu.RLock()
 			for _, client := range h.clients {
 				client.mu.RLock()
 				if message.ChannelID == "" || client.Channels[message.ChannelID] {
-					if err := client.Conn.WriteJSON(message); err != nil {
+					if err := client.SendJSON(message); err != nil {
 						log.Printf("WebSocket: Error sending to client %s: %v", client.ID, err)
 					}
 				}
@@ -109,8 +186,9 @@ func (h *Hub) BroadcastChannel(channelID, eventType string, payload interface{})
 	msg := Message{
 		Type:      eventType,
 		ChannelID: channelID,
-		Payload:   mustMarshal(payload),
+		Payload:   MustMarshal(payload),
 	}
+	log.Printf("[Hub] Broadcasting %s to channel %s", eventType, channelID)
 	h.broadcast <- &msg
 }
 
@@ -118,7 +196,7 @@ func (h *Hub) BroadcastChannel(channelID, eventType string, payload interface{})
 func (h *Hub) SendToUser(userID, eventType string, payload interface{}) {
 	msg := Message{
 		Type:    eventType,
-		Payload: mustMarshal(payload),
+		Payload: MustMarshal(payload),
 	}
 
 	h.mu.RLock()
@@ -126,7 +204,7 @@ func (h *Hub) SendToUser(userID, eventType string, payload interface{}) {
 
 	for _, client := range h.clients {
 		if client.UserID == userID {
-			if err := client.Conn.WriteJSON(msg); err != nil {
+			if err := client.SendJSON(msg); err != nil {
 				log.Printf("WebSocket: Error sending to user %s: %v", userID, err)
 			}
 		}
@@ -181,13 +259,25 @@ func (h *Hub) BroadcastToChannel(channelID, eventType string, payload interface{
 	msg := Message{
 		Type:      eventType,
 		ChannelID: channelID,
-		Payload:   mustMarshal(payload),
+		Payload:   MustMarshal(payload),
 	}
+	log.Printf("[Hub] Queuing broadcast %s to channel %s", eventType, channelID)
+	h.broadcast <- &msg
+	log.Printf("[Hub] Queued broadcast for channel %s", channelID)
+}
+
+// BroadcastAll broadcasts an event to all connected clients
+func (h *Hub) BroadcastAll(eventType string, payload interface{}) {
+	msg := Message{
+		Type:    eventType,
+		Payload: MustMarshal(payload),
+	}
+	log.Printf("[Hub] Queuing global broadcast %s", eventType)
 	h.broadcast <- &msg
 }
 
-// mustMarshal marshals or panics
-func mustMarshal(v interface{}) json.RawMessage {
+// MustMarshal marshals or returns nil on error
+func MustMarshal(v interface{}) json.RawMessage {
 	data, err := json.Marshal(v)
 	if err != nil {
 		log.Printf("WebSocket: Error marshaling message: %v", err)

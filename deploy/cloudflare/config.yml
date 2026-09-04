@@ -1,0 +1,24 @@
+# Cloudflare Named Tunnel configuration for Roompeak
+# Replace <TUNNEL_UUID> and your domain with your Cloudflare dashboard values
+
+tunnel: <TUNNEL_UUID>
+credentials-file: /etc/cloudflared/credentials.json
+
+# Ingress rules routing traffic to backend service with WebSocket support
+ingress:
+  # API & WebSocket endpoint
+  - hostname: api.yourdomain.com
+    service: http://app:8080
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 30s
+      http2Origin: false # HTTP/1.1 is recommended for WebSocket connection stability
+
+  # Frontend web app (if hosted on the same VPS / container)
+  - hostname: chat.yourdomain.com
+    service: http://web:80
+    originRequest:
+      noTLSVerify: true
+
+  # Default 404 rule for unmapped hostnames (required by Cloudflare)
+  - service: http_status:404
