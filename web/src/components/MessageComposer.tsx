@@ -3,7 +3,7 @@ import { useChannelStore } from '../stores/channelStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useAuthStore } from '../stores/authStore'
 import { toast } from '../stores/toastStore'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch } from '../utils/config'
 import {
   Send,
   Paperclip,
@@ -90,7 +90,7 @@ export function MessageComposer() {
       formData.append('file', file)
 
       try {
-        const res = await fetch(`${API_BASE_URL}/api/upload`, {
+        const res = await apiFetch('/api/upload', {
           method: 'POST',
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
@@ -157,7 +157,7 @@ export function MessageComposer() {
     } else {
       // Fallback only if WebSocket is disconnected
       try {
-        await fetch(`${API_BASE_URL}/api/channels/${activeChannelId}/messages`, {
+        await apiFetch(`/api/channels/${activeChannelId}/messages`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

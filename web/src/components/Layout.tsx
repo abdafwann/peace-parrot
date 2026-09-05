@@ -9,6 +9,7 @@ import { BottomSidebar } from './BottomSidebar'
 import { MemberList } from './MemberList'
 import { ServerSettingsModal } from './ServerSettingsModal'
 import { CreateChannelModal } from './CreateChannelModal'
+import { APP_VERSION } from '../utils/config'
 
 interface LayoutProps {
   children?: ReactNode
@@ -167,6 +168,13 @@ export function Layout({ children }: LayoutProps) {
                   Switch to {theme === 'dark' ? 'Light' : 'Dark'} Mode
                 </span>
               </button>
+
+              <div className="h-px bg-white/5 my-1" />
+
+              <div className="px-3 py-1.5 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+                <span>Roompeak Desktop</span>
+                <span className="px-1.5 py-0.5 rounded bg-white/5 text-emerald-400 font-bold">v{APP_VERSION}</span>
+              </div>
             </div>
           )}
         </div>

@@ -16,7 +16,7 @@ import {
   SoundboardItem,
   playSoundboardEffect,
 } from '../utils/soundboardAudio'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch } from '../utils/config'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useAuthStore } from '../stores/authStore'
@@ -53,7 +53,7 @@ export function SoundboardModal({ isOpen, onClose }: SoundboardModalProps) {
   useEffect(() => {
     const fetchSounds = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/soundboard`)
+        const res = await apiFetch('/api/soundboard')
         if (res.ok) {
           const items: SoundboardItem[] = await res.json()
           if (Array.isArray(items)) {
@@ -198,7 +198,7 @@ export function SoundboardModal({ isOpen, onClose }: SoundboardModalProps) {
 
     const token = localStorage.getItem('token') || ''
     try {
-      await fetch(`${API_BASE_URL}/api/soundboard/${id}`, {
+      await apiFetch(`/api/soundboard/${id}`, {
         method: 'DELETE',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })

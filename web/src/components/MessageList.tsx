@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useChannelStore } from '../stores/channelStore'
 import { useAuthStore } from '../stores/authStore'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch } from '../utils/config'
 import { useServerStore } from '../stores/serverStore'
 import { useWebSocketStore, type WSMessage } from '../stores/websocketStore'
 import { format } from 'date-fns'
@@ -93,7 +93,7 @@ export function MessageList() {
 
   // Fetch roles and registered users map
   const fetchUsers = () => {
-    fetch(`${API_BASE_URL}/api/users`)
+    apiFetch('/api/users')
       .then((r) => r.json())
       .then((list) => {
         if (Array.isArray(list)) {
@@ -126,7 +126,7 @@ export function MessageList() {
     if (!activeChannelId) return
     setLoading(true)
 
-    fetch(`${API_BASE_URL}/api/channels/${activeChannelId}/messages?limit=50`)
+    apiFetch(`/api/channels/${activeChannelId}/messages?limit=50`)
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data)) {
@@ -474,7 +474,7 @@ function MessageItem({
 
   const handleAddReaction = async (emoji: string) => {
     try {
-      await fetch(`${API_BASE_URL}/api/messages/${message.id}/reactions`, {
+      await apiFetch(`/api/messages/${message.id}/reactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emoji }),
@@ -495,7 +495,7 @@ function MessageItem({
 
   const handleRemoveReaction = async (emoji: string) => {
     try {
-      await fetch(`${API_BASE_URL}/api/messages/${message.id}/reactions/${encodeURIComponent(emoji)}`, {
+      await apiFetch(`/api/messages/${message.id}/reactions/${encodeURIComponent(emoji)}`, {
         method: 'DELETE',
       })
       // Optimistic update

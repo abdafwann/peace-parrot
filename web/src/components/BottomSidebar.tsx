@@ -25,6 +25,7 @@ import { SoundboardModal } from './SoundboardModal'
 import { playSoundEffect } from '../utils/soundEffects'
 import { playSoundboardEffect } from '../utils/soundboardAudio'
 import { toast } from '../stores/toastStore'
+import { APP_VERSION } from '../utils/config'
 
 export function BottomSidebar() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
@@ -280,7 +281,7 @@ export function BottomSidebar() {
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="p-2 rounded-xl hover:text-slate-100 hover:bg-white/[0.06] transition-all group active:scale-95 cursor-pointer"
-            title="User Settings"
+            title={`User Settings (v${APP_VERSION})`}
           >
             <Settings size={16} className="group-hover:rotate-45 transition-transform duration-300" />
           </button>

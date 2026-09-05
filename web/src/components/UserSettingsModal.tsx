@@ -25,7 +25,7 @@ import {
   playSoundEffect,
   requestDesktopNotificationPermission,
 } from '../utils/soundEffects'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch, APP_VERSION } from '../utils/config'
 
 interface UserSettingsModalProps {
   isOpen: boolean
@@ -240,7 +240,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       const formData = new FormData()
       formData.append('file', file)
 
-      const res = await fetch(`${API_BASE_URL}/api/users/me/avatar`, {
+      const res = await apiFetch('/api/users/me/avatar', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -281,7 +281,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       const formData = new FormData()
       formData.append('file', file)
 
-      const res = await fetch(`${API_BASE_URL}/api/users/me/banner`, {
+      const res = await apiFetch('/api/users/me/banner', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -314,7 +314,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
     setSaveSuccess(false)
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users/me`, {
+      const res = await apiFetch('/api/users/me', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -440,7 +440,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                 <Sparkles size={14} className="text-emerald-400" />
                 <span>Check for Updates</span>
               </div>
-              <span className="text-[10px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/10">v1.0.0</span>
+              <span className="text-[10px] font-mono text-emerald-400 font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/10">v{APP_VERSION}</span>
             </button>
 
             <button

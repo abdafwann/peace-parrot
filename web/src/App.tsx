@@ -4,14 +4,15 @@ import { LoginForm, RegisterForm } from './components/AuthForms'
 import { MessageList } from './components/MessageList'
 import { MessageComposer } from './components/MessageComposer'
 import { TypingIndicator } from './components/TypingIndicator'
+import { ServerConnectionModal } from './components/ServerConnectionModal'
 import { useAuthStore } from './stores/authStore'
 import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocketStore, setTokenGetter } from './stores/websocketStore'
 import { useSFU } from './hooks/useSFU'
-import { API_BASE_URL } from './utils/config'
+import { apiFetch, API_BASE_URL, APP_VERSION } from './utils/config'
 import { useState, useEffect } from 'react'
-import { Sun, Moon, Bird } from 'lucide-react'
+import { Sun, Moon, Bird, Server, Settings2 } from 'lucide-react'
 
 type AuthMode = 'login' | 'register'
 
@@ -39,6 +40,17 @@ function ThemeToggle() {
 
 function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) {
   const [urlInviteCode, setUrlInviteCode] = useState('')
+  const [showServerModal, setShowServerModal] = useState(false)
+  const [serverUrl, setServerUrl] = useState(API_BASE_URL)
+
+  // Listen to server url change
+  useEffect(() => {
+    const handleUrlChange = (e: any) => {
+      if (e.detail?.url) setServerUrl(e.detail.url)
+    }
+    window.addEventListener('api-base-url-changed', handleUrlChange)
+    return () => window.removeEventListener('api-base-url-changed', handleUrlChange)
+  }, [])
 
   // Check URL params for invite code e.g. ?invite=PEAK-XXXX
   useEffect(() => {
@@ -55,6 +67,10 @@ function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) 
       // Ignore URL parsing failure
     }
   }, [mode, onSwitch])
+
+  const formattedServerDisplay = serverUrl
+    .replace(/^https?:\/\//, '')
+    .replace(/\/+$/, '')
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-[#0a0d14] p-4 select-none">
@@ -134,14 +150,40 @@ function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) 
           )}
         </div>
 
-        {/* Footer info */}
-        <div className="text-center mt-6 space-y-1">
-          <p className="text-[11px] text-slate-400 flex items-center justify-center gap-1.5 font-medium">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            End-to-end encrypted voice & real-time chat
-          </p>
+        {/* Footer info & Server Switcher */}
+        <div className="text-center mt-6 space-y-2.5">
+          {/* Server Connection Badge */}
+          <div className="flex justify-center">
+            <button
+              type="button"
+              onClick={() => setShowServerModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 text-[11px] text-slate-300 transition-all cursor-pointer group"
+              title="Click to change server or cloudflare tunnel URL"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <Server size={12} className="text-slate-400 group-hover:text-emerald-400 transition-colors" />
+              <span className="font-mono text-slate-400 group-hover:text-slate-200">{formattedServerDisplay}</span>
+              <Settings2 size={12} className="text-slate-500 group-hover:text-slate-300 ml-0.5" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 text-[11px] text-slate-400 font-medium">
+            <span className="px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/5 font-mono text-slate-300">
+              v{APP_VERSION}
+            </span>
+            <span>•</span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              End-to-end encrypted voice & real-time chat
+            </span>
+          </div>
         </div>
       </div>
+
+      <ServerConnectionModal
+        isOpen={showServerModal}
+        onClose={() => setShowServerModal(false)}
+      />
     </div>
   )
 }
@@ -180,7 +222,7 @@ function ChatPage() {
   // Fetch and refresh current user profile on mount
   useEffect(() => {
     if (token) {
-      fetch(`${API_BASE_URL}/api/users/me`, {
+      apiFetch('/api/users/me', {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => {
@@ -202,7 +244,7 @@ function ChatPage() {
 
   // Fetch channels on mount
   useEffect(() => {
-    fetch(`${API_BASE_URL}/api/channels`)
+    apiFetch('/api/channels')
       .then((res) => res.json())
       .then((data) => {
         if (Array.isArray(data) && data.length > 0) {

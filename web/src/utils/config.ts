@@ -1,6 +1,7 @@
-// Global API & WebSocket Endpoint Configuration with Auto-Fallback
+// Global API & WebSocket Endpoint Configuration with Intelligent Auto-Fallback
 
-const DEFAULT_LOCAL_URL = 'http://localhost:8080'
+export const APP_VERSION = '1.0.1'
+export const DEFAULT_LOCAL_URL = 'http://localhost:8080'
 
 const getInitialApiBaseUrl = (): string => {
   // 1. Check custom saved server URL in localStorage
@@ -35,6 +36,10 @@ const getInitialApiBaseUrl = (): string => {
 
 export let API_BASE_URL = getInitialApiBaseUrl()
 
+export function getApiBaseUrl(): string {
+  return API_BASE_URL
+}
+
 export const getWsUrl = (): string => {
   const envWs = import.meta.env.VITE_WS_URL
   if (envWs && typeof envWs === 'string' && envWs.trim() !== '') {
@@ -58,10 +63,17 @@ export const getWsUrl = (): string => {
 
 export let WS_BASE_URL = getWsUrl()
 
-export function setApiBaseUrl(newUrl: string) {
-  API_BASE_URL = newUrl.replace(/\/+$/, '')
+export function setApiBaseUrl(newUrl: string, persistToStorage = false) {
+  const clean = newUrl.trim().replace(/\/+$/, '')
+  API_BASE_URL = clean
   WS_BASE_URL = getWsUrl()
+
   if (typeof window !== 'undefined') {
+    if (persistToStorage) {
+      try {
+        localStorage.setItem('peaceparrot_custom_api_url', clean)
+      } catch {}
+    }
     window.dispatchEvent(
       new CustomEvent('api-base-url-changed', {
         detail: { url: API_BASE_URL, wsUrl: WS_BASE_URL },
@@ -83,7 +95,7 @@ export async function probeAndAutoFallbackEndpoint(): Promise<string> {
   let isPrimaryAlive = false
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 2500)
+    const timeoutId = setTimeout(() => controller.abort(), 1800)
 
     const res = await fetch(`${primary}/health`, {
       signal: controller.signal,
@@ -104,7 +116,7 @@ export async function probeAndAutoFallbackEndpoint(): Promise<string> {
   if (!isPrimaryAlive) {
     try {
       const localController = new AbortController()
-      const localTimeout = setTimeout(() => localController.abort(), 1500)
+      const localTimeout = setTimeout(() => localController.abort(), 1200)
 
       const localRes = await fetch(`${DEFAULT_LOCAL_URL}/health`, {
         signal: localController.signal,
@@ -125,9 +137,62 @@ export async function probeAndAutoFallbackEndpoint(): Promise<string> {
   return primary
 }
 
+/**
+ * Resilient fetch wrapper:
+ * If the configured Cloudflare tunnel / remote endpoint fails (network error, timeout, or 502/503/504/530),
+ * it seamlessly and automatically falls back to localhost:8080 and retries the request!
+ */
+export async function apiFetch(pathOrUrl: string, init?: RequestInit): Promise<Response> {
+  const resolveUrl = (baseUrl: string) => {
+    if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+      return pathOrUrl
+    }
+    const cleanPath = pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`
+    return `${baseUrl}${cleanPath}`
+  }
+
+  const primaryUrl = resolveUrl(API_BASE_URL)
+  const isRemote = !primaryUrl.includes('localhost:8080') && !primaryUrl.includes('127.0.0.1:8080')
+
+  // If calling remote tunnel without a custom signal, use a 2s timeout for fast fallback
+  let timeoutId: any = null
+  let requestInit = init
+  if (isRemote && !init?.signal) {
+    const controller = new AbortController()
+    timeoutId = setTimeout(() => controller.abort(), 2200)
+    requestInit = { ...init, signal: controller.signal }
+  }
+
+  try {
+    const res = await fetch(primaryUrl, requestInit)
+    if (timeoutId) clearTimeout(timeoutId)
+
+    // Check for Cloudflare tunnel downtime error codes (502, 503, 504, 530)
+    if (!res.ok && [502, 503, 504, 530].includes(res.status) && isRemote) {
+      console.warn(`[Config] Remote request returned ${res.status}. Falling back to ${DEFAULT_LOCAL_URL}`)
+      setApiBaseUrl(DEFAULT_LOCAL_URL)
+      const fallbackUrl = resolveUrl(DEFAULT_LOCAL_URL)
+      return await fetch(fallbackUrl, init)
+    }
+
+    return res
+  } catch (err) {
+    if (timeoutId) clearTimeout(timeoutId)
+
+    // Network / DNS / Connection refused / Timeout error on remote tunnel
+    if (isRemote) {
+      console.warn(`[Config] Network error requesting ${primaryUrl}. Auto-falling back to ${DEFAULT_LOCAL_URL}:`, err)
+      setApiBaseUrl(DEFAULT_LOCAL_URL)
+      const fallbackUrl = resolveUrl(DEFAULT_LOCAL_URL)
+      return await fetch(fallbackUrl, init)
+    }
+    throw err
+  }
+}
+
 // Automatically trigger probe in background on startup
 if (typeof window !== 'undefined') {
   setTimeout(() => {
     probeAndAutoFallbackEndpoint().catch(() => {})
-  }, 150)
+  }, 100)
 }

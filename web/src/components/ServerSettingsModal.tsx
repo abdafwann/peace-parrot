@@ -28,7 +28,7 @@ import { CreateChannelModal } from './CreateChannelModal'
 import { RoleBadge } from './RoleBadge'
 import { ConfirmModal } from './ConfirmModal'
 import { toast } from '../stores/toastStore'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch } from '../utils/config'
 
 interface ServerSettingsModalProps {
   isOpen: boolean
@@ -130,7 +130,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
 
   const fetchInvites = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/invites`, {
+      const res = await apiFetch('/api/invites', {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
@@ -145,7 +145,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   const handleCreateInvite = async () => {
     setIsCreatingInvite(true)
     try {
-      const res = await fetch(`${API_BASE_URL}/api/invites`, {
+      const res = await apiFetch('/api/invites', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -209,7 +209,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
 
   const fetchMembers = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users`)
+      const res = await apiFetch('/api/users')
       if (res.ok) {
         const data = await res.json()
         setMembersList(Array.isArray(data) ? data : [])
@@ -280,7 +280,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
       isDanger: true,
       onConfirm: async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/channels/${channelId}`, {
+          const res = await apiFetch(`/api/channels/${channelId}`, {
             method: 'DELETE',
             headers: { Authorization: `Bearer ${token}` },
           })

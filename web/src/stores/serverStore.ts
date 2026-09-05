@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { useAuthStore } from './authStore'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch } from '../utils/config'
 
 export interface ServerSettings {
   id: string
@@ -79,7 +79,7 @@ export const useServerStore = create<ServerState>((set) => ({
 
   fetchRoles: async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/server/roles`)
+      const res = await apiFetch('/api/server/roles')
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
@@ -94,7 +94,7 @@ export const useServerStore = create<ServerState>((set) => ({
   createRole: async (name: string, color: string, iconUrl: string, permissions: number) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/roles`, {
+      const res = await apiFetch('/api/server/roles', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,7 +116,7 @@ export const useServerStore = create<ServerState>((set) => ({
   updateRole: async (id: string, name: string, color: string, iconUrl: string, permissions: number) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/roles/${id}`, {
+      const res = await apiFetch(`/api/server/roles/${id}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -143,7 +143,7 @@ export const useServerStore = create<ServerState>((set) => ({
       const formData = new FormData()
       formData.append('icon', file)
 
-      const res = await fetch(`${API_BASE_URL}/api/server/roles/${id}/icon`, {
+      const res = await apiFetch(`/api/server/roles/${id}/icon`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
@@ -167,7 +167,7 @@ export const useServerStore = create<ServerState>((set) => ({
   deleteRole: async (id: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/roles/${id}`, {
+      const res = await apiFetch(`/api/server/roles/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -183,7 +183,7 @@ export const useServerStore = create<ServerState>((set) => ({
 
   fetchSettings: async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/server`)
+      const res = await apiFetch('/api/server')
       if (res.ok) {
         const data = await res.json()
         set({ settings: data })
@@ -197,7 +197,7 @@ export const useServerStore = create<ServerState>((set) => ({
     set({ isLoading: true, error: null })
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server`, {
+      const res = await apiFetch('/api/server', {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
@@ -230,7 +230,7 @@ export const useServerStore = create<ServerState>((set) => ({
       const formData = new FormData()
       formData.append('icon', file)
 
-      const res = await fetch(`${API_BASE_URL}/api/server/icon`, {
+      const res = await apiFetch('/api/server/icon', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -257,7 +257,7 @@ export const useServerStore = create<ServerState>((set) => ({
   fetchBans: async () => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/bans`, {
+      const res = await apiFetch('/api/server/bans', {
         headers: { Authorization: `Bearer ${token}` },
       })
       if (res.ok) {
@@ -272,7 +272,7 @@ export const useServerStore = create<ServerState>((set) => ({
   banUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/bans/${userId}`, {
+      const res = await apiFetch(`/api/server/bans/${userId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -285,7 +285,7 @@ export const useServerStore = create<ServerState>((set) => ({
   unbanUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/bans/${userId}`, {
+      const res = await apiFetch(`/api/server/bans/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -298,7 +298,7 @@ export const useServerStore = create<ServerState>((set) => ({
   kickUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/kicks/${userId}`, {
+      const res = await apiFetch(`/api/server/kicks/${userId}`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -311,7 +311,7 @@ export const useServerStore = create<ServerState>((set) => ({
   muteUser: async (userId: string, durationMinutes: number) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/mutes/${userId}`, {
+      const res = await apiFetch(`/api/server/mutes/${userId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -328,7 +328,7 @@ export const useServerStore = create<ServerState>((set) => ({
   unmuteUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/mutes/${userId}`, {
+      const res = await apiFetch(`/api/server/mutes/${userId}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
@@ -341,7 +341,7 @@ export const useServerStore = create<ServerState>((set) => ({
   updateMemberRole: async (userId: string, role: string) => {
     try {
       const token = useAuthStore.getState().token
-      const res = await fetch(`${API_BASE_URL}/api/server/members/${userId}/role`, {
+      const res = await apiFetch(`/api/server/members/${userId}/role`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

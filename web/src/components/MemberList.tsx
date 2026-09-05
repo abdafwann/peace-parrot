@@ -5,7 +5,7 @@ import { useVoiceStore } from '../stores/voiceStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useServerStore } from '../stores/serverStore'
 import { RoleBadge } from './RoleBadge'
-import { API_BASE_URL } from '../utils/config'
+import { apiFetch } from '../utils/config'
 
 export interface Member {
   id: string
@@ -85,7 +85,7 @@ export function MemberList() {
   // Reusable function to fetch users list from backend
   const fetchUsers = async () => {
     try {
-      const res = await fetch(`${API_BASE_URL}/api/users`)
+      const res = await apiFetch('/api/users')
       if (res.ok) {
         const data = await res.json()
         if (Array.isArray(data) && data.length > 0) {
