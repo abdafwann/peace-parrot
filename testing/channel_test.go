@@ -35,6 +35,9 @@ func TestChannelPosition(t *testing.T) {
 				Type:     "text",
 				Position: tt.position,
 			}
+			if ch.ID != "test-id" || ch.Name != "test" || ch.Type != "text" {
+				t.Error("Channel basic fields not set properly")
+			}
 			if ch.Position != tt.position {
 				t.Errorf("Position = %d, want %d", ch.Position, tt.position)
 			}
@@ -55,6 +58,10 @@ func TestChannelTimestamps(t *testing.T) {
 		UpdatedAt: now,
 	}
 
+	if ch.ID != "test-id" || ch.Name != "test-channel" || ch.Type != "text" || ch.CreatedBy != "user-1" {
+		t.Error("Channel fields not initialized correctly")
+	}
+
 	if ch.CreatedAt.IsZero() {
 		t.Error("CreatedAt should not be zero")
 	}
@@ -70,6 +77,10 @@ func TestChannelOptionalFields(t *testing.T) {
 		ID:   "test-id",
 		Name: "General",
 		Type: "text",
+	}
+
+	if ch.ID != "test-id" || ch.Name != "General" || ch.Type != "text" {
+		t.Error("Channel required fields not set correctly")
 	}
 
 	if ch.Topic != "" {
@@ -88,6 +99,10 @@ func TestChannelTypesValid(t *testing.T) {
 		ID:   "test",
 		Name: "Test",
 		Type: "text",
+	}
+
+	if validChannel.ID != "test" || validChannel.Name != "Test" {
+		t.Error("Channel basic fields mismatch")
 	}
 
 	if validChannel.Type != "text" && validChannel.Type != "voice" {

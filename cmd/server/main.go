@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/abdafwann/peace-parrot/internal/message"
 	"github.com/abdafwann/peace-parrot/internal/moderation"
 	"github.com/abdafwann/peace-parrot/internal/server"
+	"github.com/abdafwann/peace-parrot/internal/soundboard"
 	"github.com/abdafwann/peace-parrot/internal/upload"
 	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/internal/voice"
@@ -89,6 +92,10 @@ func main() {
 	// Server settings handler
 	serverStore := server.NewStore(db)
 	serverHandler := server.NewHandler(serverStore, userStore, moderationStore, cld, hub)
+
+	// Soundboard handler
+	soundboardStore := soundboard.NewStore(db)
+	soundboardHandler := soundboard.NewHandler(soundboardStore, hub)
 
 	// Voice handler - needs broadcast function from hub
 	voiceHandler := voice.NewHandler(
@@ -198,6 +205,11 @@ func main() {
 	mod.DELETE("/mute/:userId", moderationHandler.Unmute)
 	mod.GET("/status/:userId", moderationHandler.CheckStatus)
 
+	// Soundboard routes
+	api.GET("/soundboard", soundboardHandler.List)
+	api.POST("/soundboard", soundboardHandler.Create, auth.JWTMiddleware(jwtMgr))
+	api.DELETE("/soundboard/:id", soundboardHandler.Delete, auth.JWTMiddleware(jwtMgr))
+
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")
 	api.POST("/upload", uploadHandler.UploadFile)
@@ -205,8 +217,21 @@ func main() {
 
 	// Serve frontend SPA web assets if present
 	if _, err := os.Stat("web/dist"); err == nil {
-		e.Static("/", "web/dist")
-		e.File("/*", "web/dist/index.html")
+		e.Static("/assets", "web/dist/assets")
+		e.GET("/*", func(c echo.Context) error {
+			path := c.Request().URL.Path
+			// Do not intercept API, WebSocket, or Uploads endpoints
+			if strings.HasPrefix(path, "/api") || strings.HasPrefix(path, "/ws") || strings.HasPrefix(path, "/uploads") {
+				return echo.ErrNotFound
+			}
+			// If physical file exists in web/dist, serve it (e.g. favicon, manifest, etc.)
+			filePath := filepath.Join("web/dist", filepath.Clean(path))
+			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+				return c.File(filePath)
+			}
+			// Otherwise fallback to index.html for SPA client-side routing
+			return c.File("web/dist/index.html")
+		})
 	}
 
 	// Start server

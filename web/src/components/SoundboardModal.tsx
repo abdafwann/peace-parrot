@@ -16,6 +16,7 @@ import {
   SoundboardItem,
   playSoundboardEffect,
 } from '../utils/soundboardAudio'
+import { API_BASE_URL } from '../utils/config'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useAuthStore } from '../stores/authStore'
@@ -47,6 +48,50 @@ export function SoundboardModal({ isOpen, onClose }: SoundboardModalProps) {
   const popoutRef = useRef<HTMLDivElement>(null)
   const send = useWebSocketStore((s) => s.send)
   const currentVoiceRoom = useVoiceStore((s) => s.channelId)
+
+  // Fetch server soundboard items and listen to real-time events
+  useEffect(() => {
+    const fetchSounds = async () => {
+      try {
+        const res = await fetch(`${API_BASE_URL}/api/soundboard`)
+        if (res.ok) {
+          const items: SoundboardItem[] = await res.json()
+          if (Array.isArray(items)) {
+            setCustomSounds(items)
+            localStorage.setItem('peaceparrot_custom_sounds', JSON.stringify(items))
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to fetch server soundboard items:', err)
+      }
+    }
+    fetchSounds()
+
+    const unsubscribe = useWebSocketStore.getState().subscribe((msg) => {
+      if (msg.type === 'soundboard_item_add') {
+        const item = msg.payload as unknown as SoundboardItem
+        if (item && item.id) {
+          setCustomSounds((prev) => {
+            if (prev.some((s) => s.id === item.id)) return prev
+            const updated = [...prev, item]
+            localStorage.setItem('peaceparrot_custom_sounds', JSON.stringify(updated))
+            return updated
+          })
+        }
+      } else if (msg.type === 'soundboard_item_delete') {
+        const { id } = (msg.payload || {}) as { id?: string }
+        if (id) {
+          setCustomSounds((prev) => {
+            const updated = prev.filter((s) => s.id !== id)
+            localStorage.setItem('peaceparrot_custom_sounds', JSON.stringify(updated))
+            return updated
+          })
+        }
+      }
+    })
+
+    return unsubscribe
+  }, [])
 
   // Click outside / Outfocus to close popout
   useEffect(() => {
@@ -137,16 +182,29 @@ export function SoundboardModal({ isOpen, onClose }: SoundboardModalProps) {
   }
 
   const handleSoundAdded = (newSound: SoundboardItem) => {
-    const updated = [...customSounds, newSound]
-    setCustomSounds(updated)
-    localStorage.setItem('peaceparrot_custom_sounds', JSON.stringify(updated))
+    setCustomSounds((prev) => {
+      if (prev.some((s) => s.id === newSound.id)) return prev
+      const updated = [...prev, newSound]
+      localStorage.setItem('peaceparrot_custom_sounds', JSON.stringify(updated))
+      return updated
+    })
   }
 
-  const handleDeleteCustomSound = (id: string, e: React.MouseEvent) => {
+  const handleDeleteCustomSound = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
     const updated = customSounds.filter((s) => s.id !== id)
     setCustomSounds(updated)
     localStorage.setItem('peaceparrot_custom_sounds', JSON.stringify(updated))
+
+    const token = localStorage.getItem('token') || ''
+    try {
+      await fetch(`${API_BASE_URL}/api/soundboard/${id}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+    } catch (err) {
+      console.warn('Failed to delete soundboard item on backend:', err)
+    }
     toast.success('Sound clip removed.')
   }
 

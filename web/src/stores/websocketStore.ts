@@ -30,6 +30,8 @@ export type WSEventType =
   | 'role_deleted'
   | 'server_settings_updated'
   | 'soundboard_play'
+  | 'soundboard_item_add'
+  | 'soundboard_item_delete'
   | 'speaking'
   | 'webrtc_offer'
   | 'webrtc_answer'

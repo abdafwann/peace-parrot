@@ -1,5 +1,6 @@
 // Web Audio API Soundboard Audio Engine & Synthesizer with Per-Sound Master Gain
 import { useSettingsStore } from '../stores/settingsStore'
+import { API_BASE_URL } from './config'
 
 export interface SoundboardItem {
   id: string
@@ -8,6 +9,23 @@ export interface SoundboardItem {
   category: 'memes' | 'game' | 'sfx' | 'custom'
   duration?: string
   customUrl?: string
+  createdBy?: string
+  createdAt?: string
+}
+
+export function resolveAudioUrl(url?: string): string | undefined {
+  if (!url) return undefined
+  if (url.startsWith('data:') || url.startsWith('blob:')) return url
+  // If it was saved with hardcoded http://localhost:8080, replace with current API_BASE_URL
+  if (url.startsWith('http://localhost:8080')) {
+    const relPath = url.substring('http://localhost:8080'.length)
+    return `${API_BASE_URL}${relPath}`
+  }
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url
+  }
+  // Relative URL like /uploads/...
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
 }
 
 export const DEFAULT_SOUNDBOARD: SoundboardItem[] = [
@@ -70,37 +88,42 @@ export function playSoundboardEffect(soundId: string, customUrl?: string) {
 
   // 2. Custom Audio File Playback
   if (customUrl) {
-    try {
-      if (currentPlayingAudio) {
-        currentPlayingAudio.pause()
-        currentPlayingAudio = null
-      }
-
-      const audio = new Audio(customUrl)
-      audio.volume = volRatio
-      currentPlayingAudio = audio
-      audio.play().catch(() => {})
-
-      // Max 10s playback guard
-      setTimeout(() => {
-        if (currentPlayingAudio === audio && !audio.paused) {
-          const fadeInterval = setInterval(() => {
-            if (audio.volume > 0.05) {
-              audio.volume = Math.max(0, audio.volume - 0.05)
-            } else {
-              clearInterval(fadeInterval)
-              audio.pause()
-              audio.currentTime = 0
-              if (currentPlayingAudio === audio) {
-                currentPlayingAudio = null
-              }
-            }
-          }, 40)
+    const resolvedUrl = resolveAudioUrl(customUrl)
+    if (resolvedUrl) {
+      try {
+        if (currentPlayingAudio) {
+          currentPlayingAudio.pause()
+          currentPlayingAudio = null
         }
-      }, 10000)
-      return
-    } catch {
-      // fallback
+
+        const audio = new Audio(resolvedUrl)
+        audio.volume = volRatio
+        currentPlayingAudio = audio
+        audio.play().catch((err) => {
+          console.warn('[Soundboard] Playback failed for:', resolvedUrl, err)
+        })
+
+        // Max 10s playback guard
+        setTimeout(() => {
+          if (currentPlayingAudio === audio && !audio.paused) {
+            const fadeInterval = setInterval(() => {
+              if (audio.volume > 0.05) {
+                audio.volume = Math.max(0, audio.volume - 0.05)
+              } else {
+                clearInterval(fadeInterval)
+                audio.pause()
+                audio.currentTime = 0
+                if (currentPlayingAudio === audio) {
+                  currentPlayingAudio = null
+                }
+              }
+            }, 40)
+          }
+        }, 10000)
+        return
+      } catch {
+        // fallback
+      }
     }
   }
 

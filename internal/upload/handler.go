@@ -101,7 +101,15 @@ func (h *Handler) UploadFile(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save file locally"})
 	}
 
-	localURL := fmt.Sprintf("http://localhost:8080/uploads/%s", savedFileName)
+	scheme := "http"
+	if c.IsTLS() || c.Request().Header.Get("X-Forwarded-Proto") == "https" {
+		scheme = "https"
+	}
+	host := c.Request().Host
+	if host == "" {
+		host = "localhost:8080"
+	}
+	localURL := fmt.Sprintf("%s://%s/uploads/%s", scheme, host, savedFileName)
 
 	return c.JSON(http.StatusOK, FileResponse{
 		ID:       fileID,

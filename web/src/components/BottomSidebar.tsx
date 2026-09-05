@@ -63,7 +63,10 @@ export function BottomSidebar() {
           const isSelf = Boolean(payload.userId && payload.userId === currentUserId)
           const soundboardVol = useSettingsStore.getState().soundboardVolume ?? 80
 
-          if (!isSelf && soundboardVol > 0) {
+          const currentVoiceChannel = useVoiceStore.getState().channelId
+          const inSameChannel = !payload.channelId || (currentVoiceChannel && currentVoiceChannel === payload.channelId)
+
+          if (!isSelf && soundboardVol > 0 && inSameChannel) {
             playSoundboardEffect(payload.soundId, payload.soundUrl)
             toast.info(
               `played "${payload.soundName || payload.soundId}"`,
