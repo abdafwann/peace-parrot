@@ -4,19 +4,27 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
+	"github.com/abdafwann/peace-parrot/internal/auth"
+	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
 )
 
+type userStore interface {
+	GetUserByID(id string) (*user.User, error)
+}
+
 // Handler handles message endpoints
 type Handler struct {
-	store *Store
+	store     *Store
+	userStore userStore
 }
 
 // NewHandler creates a new message handler
-func NewHandler(store *Store) *Handler {
-	return &Handler{store: store}
+func NewHandler(store *Store, userStore userStore) *Handler {
+	return &Handler{store: store, userStore: userStore}
 }
 
 // MessageRequest represents message create/edit request
@@ -168,8 +176,29 @@ func (h *Handler) Update(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Message exceeds maximum length of 4000 characters", nil)
 	}
 
-	// TODO: Check ownership (author_id matches JWT user)
-	// TODO: Prevent editing deleted messages
+	// Check ownership or admin status
+	existingMsg, err := h.store.GetMessageByID(id)
+	if err != nil {
+		if err == ErrMessageNotFound {
+			return middleware.WriteError(c, http.StatusNotFound, "MESSAGE_NOT_FOUND", "Message not found", nil)
+		}
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve message", nil)
+	}
+
+	if existingMsg.DeletedAt != nil {
+		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Cannot edit a deleted message", nil)
+	}
+
+	currentUserID := auth.GetUserID(c)
+	isAdmin := false
+	if h.userStore != nil && currentUserID != "" {
+		if u, err := h.userStore.GetUserByID(currentUserID); err == nil && u != nil {
+			isAdmin = strings.EqualFold(u.Role, "Admin")
+		}
+	}
+	if existingMsg.AuthorID != currentUserID && !isAdmin {
+		return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "You do not have permission to edit this message", nil)
+	}
 
 	if err := h.store.UpdateMessage(id, req.Content); err != nil {
 		if err == ErrMessageNotFound {
@@ -199,7 +228,25 @@ func (h *Handler) Update(c echo.Context) error {
 func (h *Handler) Delete(c echo.Context) error {
 	id := c.Param("id")
 
-	// TODO: Check ownership or moderator status
+	// Check ownership or admin status
+	existingMsg, err := h.store.GetMessageByID(id)
+	if err != nil {
+		if err == ErrMessageNotFound {
+			return middleware.WriteError(c, http.StatusNotFound, "MESSAGE_NOT_FOUND", "Message not found", nil)
+		}
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve message", nil)
+	}
+
+	currentUserID := auth.GetUserID(c)
+	isAdmin := false
+	if h.userStore != nil && currentUserID != "" {
+		if u, err := h.userStore.GetUserByID(currentUserID); err == nil && u != nil {
+			isAdmin = strings.EqualFold(u.Role, "Admin")
+		}
+	}
+	if existingMsg.AuthorID != currentUserID && !isAdmin {
+		return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "You do not have permission to delete this message", nil)
+	}
 
 	if err := h.store.DeleteMessage(id); err != nil {
 		if err == ErrMessageNotFound {

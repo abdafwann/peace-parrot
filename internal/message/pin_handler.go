@@ -3,6 +3,7 @@ package message
 import (
 	"net/http"
 
+	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
 )
@@ -36,8 +37,10 @@ func (h *PinHandler) Pin(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Message does not belong to this channel", nil)
 	}
 
-	// TODO: Get user ID from JWT middleware
-	pinnedBy := "system" // TODO: Get from JWT
+	pinnedBy := auth.GetUserID(c)
+	if pinnedBy == "" {
+		return middleware.WriteError(c, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required", nil)
+	}
 
 	if err := h.store.PinMessage(messageID, pinnedBy); err != nil {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to pin message", nil)

@@ -3,6 +3,7 @@ package message
 import (
 	"net/http"
 
+	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
 )
@@ -44,8 +45,10 @@ func (h *ReactionHandler) AddReaction(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Emoji is required", nil)
 	}
 
-	// TODO: Get user ID from JWT middleware
-	userID := "system" // TODO: Get from JWT
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return middleware.WriteError(c, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required", nil)
+	}
 
 	if err := h.store.AddReaction(messageID, userID, req.Emoji); err != nil {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to add reaction", nil)
@@ -74,8 +77,10 @@ func (h *ReactionHandler) RemoveReaction(c echo.Context) error {
 	messageID := c.Param("id")
 	emoji := c.Param("emoji")
 
-	// TODO: Get user ID from JWT middleware
-	userID := "system" // TODO: Get from JWT
+	userID := auth.GetUserID(c)
+	if userID == "" {
+		return middleware.WriteError(c, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required", nil)
+	}
 
 	if err := h.store.RemoveReaction(messageID, userID, emoji); err != nil {
 		if err == ErrReactionNotFound {
