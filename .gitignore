@@ -32,6 +32,13 @@ Thumbs.db
 
 # Local env
 .env
+.opencodeignore
+
+
+#plans and analysis
+docs/
+docs/*.md
+
 
 # Build artifacts
 dist/
@@ -51,6 +58,7 @@ web/dist/
 
 # Temp and Agent files
 *~
+*.md
 *.bak
 .claude/
 web/.claude/
@@ -58,7 +66,5 @@ web/.claude/
 web/.agents/
 web/skills-lock.json
 
-# Internal Documentation & Planning
-plans/
-docs/
+
 

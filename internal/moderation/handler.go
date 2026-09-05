@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
 )
@@ -31,8 +32,12 @@ type MuteResponse struct {
 // Kick handles POST /api/moderation/kick/:userId
 func (h *Handler) Kick(c echo.Context) error {
 	userID := c.Param("userId")
+	moderatorID := auth.GetUserID(c)
+	if moderatorID == "" {
+		moderatorID = "admin"
+	}
 
-	if err := h.store.KickUser(userID, "admin"); err != nil {
+	if err := h.store.KickUser(userID, moderatorID); err != nil {
 		if err == ErrUserNotFound {
 			return middleware.WriteError(c, http.StatusNotFound, "USER_NOT_FOUND", "User not found", nil)
 		}
@@ -45,8 +50,12 @@ func (h *Handler) Kick(c echo.Context) error {
 // Ban handles POST /api/moderation/ban/:userId
 func (h *Handler) Ban(c echo.Context) error {
 	userID := c.Param("userId")
+	moderatorID := auth.GetUserID(c)
+	if moderatorID == "" {
+		moderatorID = "admin"
+	}
 
-	if err := h.store.BanUser(userID, "admin"); err != nil {
+	if err := h.store.BanUser(userID, moderatorID); err != nil {
 		if err == ErrUserNotFound {
 			return middleware.WriteError(c, http.StatusNotFound, "USER_NOT_FOUND", "User not found", nil)
 		}
@@ -70,13 +79,17 @@ func (h *Handler) Unban(c echo.Context) error {
 // Mute handles POST /api/moderation/mute/:userId
 func (h *Handler) Mute(c echo.Context) error {
 	userID := c.Param("userId")
+	moderatorID := auth.GetUserID(c)
+	if moderatorID == "" {
+		moderatorID = "admin"
+	}
 
 	var req MuteRequest
 	if err := c.Bind(&req); err != nil {
 		req.DurationMinutes = 0 // Default to permanent
 	}
 
-	if err := h.store.MuteUser(userID, "admin", req.DurationMinutes); err != nil {
+	if err := h.store.MuteUser(userID, moderatorID, req.DurationMinutes); err != nil {
 		if err == ErrUserNotFound {
 			return middleware.WriteError(c, http.StatusNotFound, "USER_NOT_FOUND", "User not found", nil)
 		}

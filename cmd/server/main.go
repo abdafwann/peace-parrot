@@ -71,7 +71,7 @@ func main() {
 
 	// Message handler
 	messageStore := message.NewStore(db)
-	messageHandler := message.NewHandler(messageStore)
+	messageHandler := message.NewHandler(messageStore, userStore)
 	reactionHandler := message.NewReactionHandler(messageStore)
 	pinHandler := message.NewPinHandler(messageStore)
 
@@ -182,11 +182,12 @@ func main() {
 
 	// Pin routes
 	channels.GET("/:id/pins", pinHandler.ListPins)
-	channels.POST("/:id/pins/:messageId", pinHandler.Pin)
-	channels.DELETE("/:id/pins/:messageId", pinHandler.Unpin)
+	channels.POST("/:id/pins/:messageId", pinHandler.Pin, auth.JWTMiddleware(jwtMgr))
+	channels.DELETE("/:id/pins/:messageId", pinHandler.Unpin, auth.JWTMiddleware(jwtMgr))
 
 	// Message CRUD routes
 	messages := api.Group("/messages")
+	messages.Use(auth.JWTMiddleware(jwtMgr))
 	messages.PATCH("/:id", messageHandler.Update)
 	messages.DELETE("/:id", messageHandler.Delete)
 	messages.GET("/search", messageHandler.Search)
@@ -198,6 +199,7 @@ func main() {
 
 	// Moderation routes
 	mod := api.Group("/moderation")
+	mod.Use(auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
 	mod.POST("/kick/:userId", moderationHandler.Kick)
 	mod.POST("/ban/:userId", moderationHandler.Ban)
 	mod.DELETE("/ban/:userId", moderationHandler.Unban)
@@ -212,7 +214,7 @@ func main() {
 
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")
-	api.POST("/upload", uploadHandler.UploadFile)
+	api.POST("/upload", uploadHandler.UploadFile, auth.JWTMiddleware(jwtMgr))
 	e.Static("/uploads", "uploads")
 
 	// Serve frontend SPA web assets if present
