@@ -1,6 +1,10 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"fmt"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -69,6 +73,23 @@ func loadDotEnv(filename string) {
 func Load() *Config {
 	loadDotEnv(".env")
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	// Prevent using well-known default secrets that compromise token integrity
+	if jwtSecret == "changeme-in-production" || jwtSecret == "changeme-in-production-use-strong-secret" {
+		jwtSecret = ""
+	}
+
+	// Generate a secure ephemeral secret in memory if none provided, ensuring tokens cannot be forged via static defaults
+	if jwtSecret == "" {
+		randomBytes := make([]byte, 32)
+		if _, err := rand.Read(randomBytes); err == nil {
+			jwtSecret = hex.EncodeToString(randomBytes)
+			log.Println("[config] WARNING: JWT_SECRET not configured. Generated ephemeral secret for this session.")
+		} else {
+			jwtSecret = "fallback-ephemeral-secret-random-32chars"
+		}
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Port:         getEnv("SERVER_PORT", "8080"),
@@ -80,7 +101,7 @@ func Load() *Config {
 			MigrationsDir: getEnv("MIGRATIONS_PATH", "./migrations"),
 		},
 		JWT: JWTConfig{
-			Secret: getEnv("JWT_SECRET", "changeme-in-production"),
+			Secret: jwtSecret,
 			Expiry: getEnvInt("JWT_EXPIRY_DAYS", 7),
 		},
 		Cloudinary: CloudinaryConfig{
@@ -89,6 +110,14 @@ func Load() *Config {
 			APISecret: getEnv("CLOUDINARY_API_SECRET", ""),
 		},
 	}
+}
+
+// Validate ensures runtime prerequisites are satisfied before server startup
+func (c *Config) Validate() error {
+	if len(c.JWT.Secret) < 16 {
+		return fmt.Errorf("JWT secret length must be at least 16 characters for cryptographic safety")
+	}
+	return nil
 }
 
 // getEnv returns environment variable or default value

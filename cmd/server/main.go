@@ -35,6 +35,9 @@ import (
 func main() {
 	// Load configuration
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Invalid configuration: %v", err)
+	}
 
 	// Run migrations
 	log.Println("Running database migrations...")
