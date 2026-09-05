@@ -19,6 +19,7 @@ import (
 	"github.com/abdafwann/peace-parrot/internal/message"
 	"github.com/abdafwann/peace-parrot/internal/moderation"
 	"github.com/abdafwann/peace-parrot/internal/server"
+	"github.com/abdafwann/peace-parrot/internal/soundboard"
 	"github.com/abdafwann/peace-parrot/internal/upload"
 	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/internal/voice"
@@ -91,6 +92,10 @@ func main() {
 	// Server settings handler
 	serverStore := server.NewStore(db)
 	serverHandler := server.NewHandler(serverStore, userStore, moderationStore, cld, hub)
+
+	// Soundboard handler
+	soundboardStore := soundboard.NewStore(db)
+	soundboardHandler := soundboard.NewHandler(soundboardStore, hub)
 
 	// Voice handler - needs broadcast function from hub
 	voiceHandler := voice.NewHandler(
@@ -199,6 +204,11 @@ func main() {
 	mod.POST("/mute/:userId", moderationHandler.Mute)
 	mod.DELETE("/mute/:userId", moderationHandler.Unmute)
 	mod.GET("/status/:userId", moderationHandler.CheckStatus)
+
+	// Soundboard routes
+	api.GET("/soundboard", soundboardHandler.List)
+	api.POST("/soundboard", soundboardHandler.Create, auth.JWTMiddleware(jwtMgr))
+	api.DELETE("/soundboard/:id", soundboardHandler.Delete, auth.JWTMiddleware(jwtMgr))
 
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")

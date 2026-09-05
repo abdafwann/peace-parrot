@@ -257,14 +257,14 @@ func (h *WebSocketHandler) handleMessage(client *websocket.Client, msg *websocke
 
 	case "typing_start":
 		// Broadcast typing start to channel
-		result := h.handleTyping(client, msg.Payload, true, msg.ChannelID)
+		result := h.handleTyping(client, msg.Payload, msg.ChannelID)
 		if result != nil {
 			h.hub.BroadcastToChannel(result.ChannelID, "typing_start", result)
 		}
 
 	case "typing_stop":
 		// Broadcast typing stop to channel
-		result := h.handleTyping(client, msg.Payload, false, msg.ChannelID)
+		result := h.handleTyping(client, msg.Payload, msg.ChannelID)
 		if result != nil {
 			h.hub.BroadcastToChannel(result.ChannelID, "typing_stop", result)
 		}
@@ -540,7 +540,7 @@ func (h *WebSocketHandler) handleChannelJoin(client *websocket.Client, payload j
 }
 
 // handleTyping handles typing start/stop
-func (h *WebSocketHandler) handleTyping(client *websocket.Client, payload json.RawMessage, isTyping bool, channelIDFromMsg string) *TypingResponse {
+func (h *WebSocketHandler) handleTyping(client *websocket.Client, payload json.RawMessage, channelIDFromMsg string) *TypingResponse {
 	var typingPayload TypingPayload
 	if err := json.Unmarshal(payload, &typingPayload); err != nil {
 		return nil

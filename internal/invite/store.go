@@ -207,5 +207,9 @@ func (s *Store) ListInvites() ([]*Invite, error) {
 		list = append(list, &inv)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating invites: %w", err)
+	}
+
 	return list, nil
 }

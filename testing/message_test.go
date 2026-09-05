@@ -95,6 +95,10 @@ func TestMessageTimestamps(t *testing.T) {
 		CreatedAt:  now,
 	}
 
+	if msg.ID != "test-id" || msg.ChannelID != "channel-1" || msg.AuthorID != "user-1" || msg.Content != "Hello" {
+		t.Error("Message fields not set correctly")
+	}
+
 	if msg.CreatedAt.IsZero() {
 		t.Error("CreatedAt should not be zero")
 	}

@@ -310,7 +310,7 @@ export function SoundUploadModal({
         console.warn('Backend upload skipped or failed, using local audio data:', uploadErr)
       }
 
-      // 3. If server URL not available (e.g. server not restarted yet), use encoded Data URL
+      // 3. If server URL not available, use encoded Data URL
       if (!soundUrl) {
         soundUrl = await new Promise<string>((resolve) => {
           const reader = new FileReader()
@@ -319,13 +319,38 @@ export function SoundUploadModal({
         })
       }
 
-      const newSound: SoundboardItem = {
+      // 4. Save to server database so all server members get the sound
+      const token = localStorage.getItem('token') || ''
+      let newSound: SoundboardItem = {
         id: `custom-${Date.now()}`,
         name: soundName.trim(),
         emoji: selectedEmoji,
         category: 'custom',
         duration: `${trimmedLength.toFixed(1)}s`,
         customUrl: soundUrl,
+      }
+
+      try {
+        const sbRes = await fetch(`${API_BASE_URL}/api/soundboard`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            name: soundName.trim(),
+            emoji: selectedEmoji,
+            duration: `${trimmedLength.toFixed(1)}s`,
+            customUrl: soundUrl,
+          }),
+        })
+
+        if (sbRes.ok) {
+          const savedItem = await sbRes.json()
+          newSound = savedItem
+        }
+      } catch (saveErr) {
+        console.warn('Failed to save to soundboard backend, using local item:', saveErr)
       }
 
       onSoundAdded(newSound)
