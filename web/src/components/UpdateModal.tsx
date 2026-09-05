@@ -28,18 +28,7 @@ export function UpdateModal() {
   const [updateStatus, setUpdateStatus] = useState<string>('')
   const [isReadyToRestart, setIsReadyToRestart] = useState(false)
   const [tauriUpdateObj, setTauriUpdateObj] = useState<any>(null)
-  const [currentAppVersion, setCurrentAppVersion] = useState('1.0.1')
-
-  // Load active app version from Tauri if available
-  useEffect(() => {
-    if (typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window) {
-      import('@tauri-apps/api/app')
-        .then(({ getVersion }) => {
-          getVersion().then((v) => setCurrentAppVersion(v)).catch(() => {})
-        })
-        .catch(() => {})
-    }
-  }, [])
+  const currentAppVersion = '1.0.1'
 
   // Check for updates on startup
   useEffect(() => {
