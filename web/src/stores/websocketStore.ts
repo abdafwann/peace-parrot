@@ -78,9 +78,8 @@ interface WebSocketState {
   stopTyping: (channelId: string) => void
 }
 
-import { WS_BASE_URL } from '../utils/config'
+import { getWsUrl, probeAndAutoFallbackEndpoint } from '../utils/config'
 
-const WS_URL = WS_BASE_URL
 const RECONNECT_DELAY = 3000
 
 export const useWebSocketStore = create<WebSocketState>()(
@@ -103,11 +102,14 @@ export const useWebSocketStore = create<WebSocketState>()(
 
         set({ isConnecting: true, error: null })
 
+        const currentWsUrl = getWsUrl()
+
         try {
-          const ws = new WebSocket(`${WS_URL}?token=${token}`)
+          console.log('[WS] Connecting to:', currentWsUrl)
+          const ws = new WebSocket(`${currentWsUrl}?token=${token}`)
 
           ws.onopen = () => {
-            console.log('[WS] Connected')
+            console.log('[WS] Connected successfully to:', currentWsUrl)
             set({ isConnected: true, isConnecting: false, socket: ws, error: null })
 
             const { subscribedChannels, pendingMessages } = get()
@@ -137,6 +139,11 @@ export const useWebSocketStore = create<WebSocketState>()(
             console.log('[WS] Disconnected', event.code, event.reason)
             set({ isConnected: false, isConnecting: false, socket: null })
 
+            // If non-localhost failed, probe localhost fallback
+            if (!currentWsUrl.includes('localhost:8080') && !currentWsUrl.includes('127.0.0.1:8080')) {
+              probeAndAutoFallbackEndpoint().catch(() => {})
+            }
+
             // Don't reconnect if manually closed
             if (event.code !== 1000) {
               console.log('[WS] Reconnecting in', RECONNECT_DELAY, 'ms')
@@ -150,7 +157,11 @@ export const useWebSocketStore = create<WebSocketState>()(
           }
 
           ws.onerror = (error) => {
-            console.error('[WS] Error:', error)
+            console.error('[WS] Error connecting to:', currentWsUrl, error)
+            // Auto fallback to localhost if remote tunnel failed
+            if (!currentWsUrl.includes('localhost:8080') && !currentWsUrl.includes('127.0.0.1:8080')) {
+              probeAndAutoFallbackEndpoint().catch(() => {})
+            }
           }
 
           ws.onmessage = (event) => {
@@ -165,56 +176,50 @@ export const useWebSocketStore = create<WebSocketState>()(
 
           set({ socket: ws })
         } catch (err) {
-          console.error('[WS] Connection failed:', err)
+          console.error('[WS] Failed to create WebSocket connection:', err)
           set({ isConnecting: false, error: 'Failed to connect to server' })
+          if (!currentWsUrl.includes('localhost:8080')) {
+            probeAndAutoFallbackEndpoint().catch(() => {})
+          }
         }
       },
 
       disconnect: () => {
         const { socket } = get()
         if (socket) {
-          socket.close(1000, 'User disconnected')
+          socket.close(1000, 'User logged out')
           set({ socket: null, isConnected: false, isConnecting: false, pendingMessages: [] })
         }
       },
 
       send: (message: WSMessage) => {
-        const { socket, pendingMessages, subscribedChannels } = get()
+        const { socket, isConnected } = get()
 
-        // If joining a channel, record it for automatic resubscriptions
-        if (message.type === 'channel_join') {
-          const chId = (message.channelId || (message.payload as Record<string, string>)?.channelId) as string | undefined
-          if (chId) {
-            const updated = new Set(subscribedChannels)
-            updated.add(chId)
-            set({ subscribedChannels: updated })
-          }
-        }
-
-        if (socket?.readyState === WebSocket.OPEN) {
+        if (socket?.readyState === WebSocket.OPEN && isConnected) {
           socket.send(JSON.stringify(message))
         } else {
-          console.warn('[WS] Socket not open, queuing message:', message.type)
-          set({ pendingMessages: [...pendingMessages, message] })
+          console.log('[WS] Socket not open, queueing message:', message)
+          set((state) => ({
+            pendingMessages: [...state.pendingMessages, message],
+          }))
         }
       },
 
       subscribeChannel: (channelId: string) => {
-        const { subscribedChannels, socket } = get()
-        const updated = new Set(subscribedChannels)
-        updated.add(channelId)
-        set({ subscribedChannels: updated })
+        const { socket, isConnected, subscribedChannels } = get()
 
-        const msg: WSMessage = {
-          type: 'channel_join',
-          channelId,
-          payload: { channelId },
-        }
+        // Add to tracked channels
+        set({ subscribedChannels: new Set([...subscribedChannels, channelId]) })
 
-        if (socket?.readyState === WebSocket.OPEN) {
-          socket.send(JSON.stringify(msg))
-        } else {
-          get().send(msg)
+        // Send subscribe message if connected
+        if (socket?.readyState === WebSocket.OPEN && isConnected) {
+          socket.send(
+            JSON.stringify({
+              type: 'channel_join',
+              channelId,
+              payload: { channelId },
+            })
+          )
         }
       },
 
@@ -227,7 +232,8 @@ export const useWebSocketStore = create<WebSocketState>()(
       },
 
       startTyping: (channelId: string) => {
-        get().send({
+        const { send } = get()
+        send({
           type: 'typing_start',
           channelId,
           payload: { channelId },
@@ -235,7 +241,8 @@ export const useWebSocketStore = create<WebSocketState>()(
       },
 
       stopTyping: (channelId: string) => {
-        get().send({
+        const { send } = get()
+        send({
           type: 'typing_stop',
           channelId,
           payload: { channelId },
@@ -245,6 +252,20 @@ export const useWebSocketStore = create<WebSocketState>()(
     { name: 'WebSocketStore' }
   )
 )
+
+// Auto-reconnect when active API/WS base URL changes (e.g. from cloudflare tunnel to localhost)
+if (typeof window !== 'undefined') {
+  window.addEventListener('api-base-url-changed', () => {
+    const currentToken = getTokenFromStore()
+    const { socket } = useWebSocketStore.getState()
+    if (currentToken && socket) {
+      try {
+        socket.close()
+      } catch {}
+      useWebSocketStore.getState().connect(currentToken)
+    }
+  })
+}
 
 // Helper to handle incoming messages
 function handleMessage(message: WSMessage) {
