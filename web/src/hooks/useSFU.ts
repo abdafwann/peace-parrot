@@ -1,10 +1,19 @@
 import { useEffect, useRef } from 'react'
-import { useVoiceStore } from '../stores/voiceStore'
+import {
+  useVoiceStore,
+  getSavedUserVolume,
+  getSavedUserLocalMute,
+} from '../stores/voiceStore'
 import { useWebSocketStore, type WSMessage } from '../stores/websocketStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
-interface AudioElementMap {
-  [trackId: string]: HTMLAudioElement
+interface UserAudioNode {
+  userId: string
+  trackId: string
+  stream: MediaStream
+  sourceNode?: MediaStreamAudioSourceNode
+  gainNode?: GainNode
+  audioEl?: HTMLAudioElement
 }
 
 export function useSFU() {
@@ -20,10 +29,11 @@ export function useSFU() {
 
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const localStreamRef = useRef<MediaStream | null>(null)
-  const audioElementsRef = useRef<AudioElementMap>({})
+  const userAudioNodesRef = useRef<Record<string, UserAudioNode>>({})
+  const remoteAudioCtxRef = useRef<AudioContext | null>(null)
   const iceBufferRef = useRef<RTCIceCandidateInit[]>([])
   const isRemoteSetRef = useRef(false)
-  const audioContextRef = useRef<AudioContext | null>(null)
+  const localAudioContextRef = useRef<AudioContext | null>(null)
   const isPttPressedRef = useRef(false)
 
   // WebRTC Connection Lifecycle
@@ -67,34 +77,20 @@ export function useSFU() {
           }
         }
 
-        // 3. Handle incoming remote tracks (audio playback from SFU)
+        // 3. Handle incoming remote tracks (audio playback from SFU with GainNode routing)
         pc.ontrack = (event) => {
           console.log('[useSFU] Received remote track from SFU:', event.track.id, event.track.kind)
           if (event.track.kind === 'audio') {
             const trackId = event.track.id
-            let audioEl = audioElementsRef.current[trackId]
-            if (!audioEl) {
-              audioEl = document.createElement('audio')
-              audioEl.autoplay = true
-              audioEl.muted = useVoiceStore.getState().selfDeafened
-              audioEl.style.display = 'none'
-              document.body.appendChild(audioEl)
-              audioElementsRef.current[trackId] = audioEl
-            }
-
+            const streamId = event.streams && event.streams[0] ? event.streams[0].id : ''
             const mediaStream = event.streams && event.streams[0] ? event.streams[0] : new MediaStream([event.track])
-            audioEl.srcObject = mediaStream
 
-            const currentSettings = useSettingsStore.getState()
-            audioEl.volume = Math.min(1, Math.max(0, (currentSettings.outputVolume || 100) / 100))
+            // Parse userId from "audio-<userId>" or "stream-<userId>"
+            const userId = trackId.startsWith('audio-')
+              ? trackId.slice(6)
+              : (streamId.startsWith('stream-') ? streamId.slice(7) : trackId)
 
-            if (currentSettings.outputDeviceId && typeof (audioEl as any).setSinkId === 'function') {
-              ;(audioEl as any).setSinkId(currentSettings.outputDeviceId).catch(() => {})
-            }
-
-            audioEl.play().catch((err) => {
-              console.log('[useSFU] Audio play notice (waiting for user gesture):', err)
-            })
+            setupRemoteAudioNode(userId, trackId, mediaStream)
           }
         }
 
@@ -259,6 +255,115 @@ export function useSFU() {
     }
   }, [channelId, subscribe, send])
 
+  // Setup Web Audio GainNode & Audio element routing for a remote user
+  function setupRemoteAudioNode(userId: string, trackId: string, stream: MediaStream) {
+    try {
+      // 1. Clean up existing node if replacing
+      if (userAudioNodesRef.current[userId]) {
+        try {
+          userAudioNodesRef.current[userId].sourceNode?.disconnect()
+          userAudioNodesRef.current[userId].gainNode?.disconnect()
+          userAudioNodesRef.current[userId].audioEl?.remove()
+        } catch {}
+      }
+
+      // 2. Initialize AudioContext
+      let ctx = remoteAudioCtxRef.current
+      if (!ctx || ctx.state === 'closed') {
+        const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+        ctx = new AudioCtx()
+        remoteAudioCtxRef.current = ctx
+      }
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {})
+      }
+
+      // 3. Connect: MediaStream -> SourceNode -> GainNode -> Destination
+      const sourceNode = ctx.createMediaStreamSource(stream)
+      const gainNode = ctx.createGain()
+
+      const userVol = getSavedUserVolume(userId)
+      const localMuted = getSavedUserLocalMute(userId)
+      const masterVol = (useSettingsStore.getState().outputVolume ?? 100) / 100
+      const isDeafened = useVoiceStore.getState().selfDeafened
+
+      const effectiveGain = localMuted || isDeafened ? 0 : userVol * masterVol
+      gainNode.gain.setValueAtTime(effectiveGain, ctx.currentTime)
+
+      sourceNode.connect(gainNode)
+      gainNode.connect(ctx.destination)
+
+      // 4. Create an invisible audio element to keep the stream alive
+      const audioEl = document.createElement('audio')
+      audioEl.srcObject = stream
+      audioEl.autoplay = true
+      audioEl.muted = true // AudioContext handles sound with GainNode (0% - 200%)
+      audioEl.style.display = 'none'
+      document.body.appendChild(audioEl)
+      audioEl.play().catch(() => {})
+
+      userAudioNodesRef.current[userId] = {
+        userId,
+        trackId,
+        stream,
+        sourceNode,
+        gainNode,
+        audioEl,
+      }
+
+      console.log(`[useSFU] Audio node initialized for user ${userId} with initial gain: ${effectiveGain}`)
+    } catch (err) {
+      console.error(`[useSFU] Failed to setup Web Audio for user ${userId}:`, err)
+    }
+  }
+
+  // Recalculate and apply gain for all connected remote users
+  function syncAllUserGains() {
+    const ctx = remoteAudioCtxRef.current
+    if (!ctx || ctx.state === 'closed') return
+
+    const masterVol = (useSettingsStore.getState().outputVolume ?? 100) / 100
+    const isDeafened = useVoiceStore.getState().selfDeafened
+    const now = ctx.currentTime
+
+    Object.values(userAudioNodesRef.current).forEach((node) => {
+      if (node.gainNode) {
+        const userVol = getSavedUserVolume(node.userId)
+        const localMuted = getSavedUserLocalMute(node.userId)
+        const effectiveGain = localMuted || isDeafened ? 0 : userVol * masterVol
+
+        node.gainNode.gain.setValueAtTime(effectiveGain, now)
+      }
+    })
+  }
+
+  // Listen to per-user volume & local mute changes
+  useEffect(() => {
+    const handleVolumeEvent = (e: any) => {
+      const detail = e.detail as { userId?: string; volume?: number; localMuted?: boolean }
+      const ctx = remoteAudioCtxRef.current
+      if (!ctx || ctx.state === 'closed') return
+
+      if (detail?.userId && userAudioNodesRef.current[detail.userId]) {
+        const node = userAudioNodesRef.current[detail.userId]
+        if (node.gainNode) {
+          const userVol = getSavedUserVolume(detail.userId)
+          const localMuted = getSavedUserLocalMute(detail.userId)
+          const masterVol = (useSettingsStore.getState().outputVolume ?? 100) / 100
+          const isDeafened = useVoiceStore.getState().selfDeafened
+          const effectiveGain = localMuted || isDeafened ? 0 : userVol * masterVol
+
+          node.gainNode.gain.setValueAtTime(effectiveGain, ctx.currentTime)
+        }
+      } else {
+        syncAllUserGains()
+      }
+    }
+
+    window.addEventListener('user-volume-changed', handleVolumeEvent)
+    return () => window.removeEventListener('user-volume-changed', handleVolumeEvent)
+  }, [])
+
   // Sync Push-to-Talk (PTT) key listeners
   useEffect(() => {
     if (!channelId || settings.inputMode !== 'push_to_talk') return
@@ -329,13 +434,9 @@ export function useSFU() {
     }
   }, [settings.echoCancellation, settings.noiseSuppression, settings.autoGainControl])
 
-  // Sync deafen state and volume with remote audio elements
+  // Sync master volume and self-deafen state with all remote users
   useEffect(() => {
-    const vol = Math.min(1, Math.max(0, settings.outputVolume / 100))
-    Object.values(audioElementsRef.current).forEach((audioEl) => {
-      audioEl.muted = selfDeafened
-      audioEl.volume = vol
-    })
+    syncAllUserGains()
   }, [selfDeafened, settings.outputVolume])
 
   // Setup speaking detection and voice activity gating via Web Audio AnalyserNode
@@ -343,7 +444,7 @@ export function useSFU() {
     try {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
       const ctx = new AudioCtx()
-      audioContextRef.current = ctx
+      localAudioContextRef.current = ctx
 
       const analyser = ctx.createAnalyser()
       analyser.fftSize = 256
@@ -356,7 +457,7 @@ export function useSFU() {
       const HOLD_TIME_MS = 300 // Hangover hold time to prevent clipping speech
 
       const checkSpeaking = () => {
-        if (!audioContextRef.current || audioContextRef.current.state === 'closed') return
+        if (!localAudioContextRef.current || localAudioContextRef.current.state === 'closed') return
 
         const currentSettings = useSettingsStore.getState()
         const isPTT = currentSettings.inputMode === 'push_to_talk'
@@ -478,17 +579,24 @@ export function useSFU() {
       pcRef.current = null
     }
 
-    if (audioContextRef.current) {
-      audioContextRef.current.close().catch(() => {})
-      audioContextRef.current = null
+    if (localAudioContextRef.current) {
+      localAudioContextRef.current.close().catch(() => {})
+      localAudioContextRef.current = null
     }
 
-    Object.values(audioElementsRef.current).forEach((audioEl) => {
-      audioEl.pause()
-      audioEl.srcObject = null
-      audioEl.remove()
+    if (remoteAudioCtxRef.current) {
+      remoteAudioCtxRef.current.close().catch(() => {})
+      remoteAudioCtxRef.current = null
+    }
+
+    Object.values(userAudioNodesRef.current).forEach((node) => {
+      try {
+        node.sourceNode?.disconnect()
+        node.gainNode?.disconnect()
+        node.audioEl?.remove()
+      } catch {}
     })
-    audioElementsRef.current = {}
+    userAudioNodesRef.current = {}
     iceBufferRef.current = []
     isRemoteSetRef.current = false
   }

@@ -10,12 +10,19 @@ import {
   GripVertical,
   ArrowUp,
   ArrowDown,
+  VolumeX,
+  Sliders,
 } from 'lucide-react'
 import { useChannelStore, type Channel } from '../stores/channelStore'
-import { useVoiceStore } from '../stores/voiceStore'
+import {
+  useVoiceStore,
+  getSavedUserVolume,
+  getSavedUserLocalMute,
+} from '../stores/voiceStore'
 import { useAuthStore } from '../stores/authStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { CreateChannelModal } from './CreateChannelModal'
+import { UserVolumePopover } from './UserVolumePopover'
 
 export function ChannelList() {
   const channels = useChannelStore((state) => state.channels)
@@ -367,11 +374,38 @@ function VoiceChannelItem({
   const setIsConnected = useVoiceStore((state) => state.setIsConnected)
   const user = useAuthStore((state) => state.user)
 
+  const [activeVolumeUser, setActiveVolumeUser] = useState<{
+    userId: string
+    displayName: string
+    username?: string
+    avatarUrl?: string
+    anchorPosition: { x: number; y: number }
+  } | null>(null)
+
   const isInThisChannel = isInVoice && currentChannelId === channel.id
   const channelParticipants = Array.from(participants.entries()).filter(
     ([_, p]) => !p.channelId || p.channelId === channel.id
   )
   const participantCount = channelParticipants.length
+
+  const handleOpenVolume = (
+    e: React.MouseEvent,
+    targetUserId: string,
+    targetDisplayName: string,
+    targetUsername?: string,
+    targetAvatarUrl?: string
+  ) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+    setActiveVolumeUser({
+      userId: targetUserId,
+      displayName: targetDisplayName,
+      username: targetUsername,
+      avatarUrl: targetAvatarUrl,
+      anchorPosition: { x: rect.right + 8, y: rect.top },
+    })
+  }
 
   const handleChannelClick = () => {
     if (!isInThisChannel) {
@@ -493,10 +527,19 @@ function VoiceChannelItem({
             const initial = displayName[0]?.toUpperCase() || 'U'
             const avatarUrl = isSelf ? user?.avatarUrl : (participant as any).avatarUrl
 
+            const userVol = !isSelf ? Math.round(getSavedUserVolume(userId) * 100) : 100
+            const isLocallyMuted = !isSelf ? getSavedUserLocalMute(userId) : false
+
             return (
               <div
                 key={userId}
-                className="flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors bg-white/[0.02] hover:bg-white/[0.05]"
+                onContextMenu={(e) => {
+                  if (!isSelf) {
+                    handleOpenVolume(e, userId, displayName, participant.username, avatarUrl)
+                  }
+                }}
+                className="group/user flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors bg-white/[0.02] hover:bg-white/[0.05] relative cursor-pointer"
+                title={!isSelf ? 'Right click or click volume to adjust user volume' : undefined}
               >
                 {/* Avatar */}
                 <div className="relative shrink-0">
@@ -527,6 +570,33 @@ function VoiceChannelItem({
                   {displayName}
                 </span>
 
+                {/* Custom volume indicator badge if adjusted */}
+                {!isSelf && (isLocallyMuted || userVol !== 100) && (
+                  <span
+                    className={`text-[9px] font-mono px-1 py-0.2 rounded font-bold shrink-0 ${
+                      isLocallyMuted
+                        ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                        : userVol > 100
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}
+                  >
+                    {isLocallyMuted ? 'MUTED' : `${userVol}%`}
+                  </span>
+                )}
+
+                {/* Remote User Volume Quick Adjust Button on hover */}
+                {!isSelf && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleOpenVolume(e, userId, displayName, participant.username, avatarUrl)}
+                    className="hidden group-hover/user:flex items-center justify-center p-1 rounded hover:bg-white/10 text-slate-400 hover:text-emerald-400 transition-colors shrink-0"
+                    title="User Volume (0-200%)"
+                  >
+                    {isLocallyMuted ? <VolumeX size={12} className="text-rose-400" /> : <Sliders size={12} />}
+                  </button>
+                )}
+
                 {/* Status indicators */}
                 <div className="flex items-center gap-1 shrink-0 text-slate-400">
                   {isMuted && (
@@ -544,6 +614,19 @@ function VoiceChannelItem({
             )
           })}
         </div>
+      )}
+
+      {/* Per-User Volume Popover */}
+      {activeVolumeUser && (
+        <UserVolumePopover
+          isOpen={true}
+          userId={activeVolumeUser.userId}
+          displayName={activeVolumeUser.displayName}
+          username={activeVolumeUser.username}
+          avatarUrl={activeVolumeUser.avatarUrl}
+          anchorPosition={activeVolumeUser.anchorPosition}
+          onClose={() => setActiveVolumeUser(null)}
+        />
       )}
     </div>
   )
