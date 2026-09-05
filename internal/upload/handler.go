@@ -3,17 +3,46 @@ package upload
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/pkg/cloudinary"
+	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
 const MaxUploadSize = 10 * 1024 * 1024 // 10 MB
+
+// Whitelist of permissible file extensions to prevent arbitrary file upload vulnerabilities (such as HTML/JS execution or executable storage)
+var allowedExtensions = map[string]bool{
+	// Images
+	".jpg":  true,
+	".jpeg": true,
+	".png":  true,
+	".gif":  true,
+	".webp": true,
+	".svg":  true,
+	".ico":  true,
+	// Audio & Soundboard
+	".mp3":  true,
+	".wav":  true,
+	".ogg":  true,
+	".m4a":  true,
+	".aac":  true,
+	".flac": true,
+	// Video
+	".mp4":  true,
+	".webm": true,
+	".mov":  true,
+	// Documents
+	".pdf":  true,
+	".txt":  true,
+}
 
 type Handler struct {
 	cld       *cloudinary.Client
@@ -63,10 +92,20 @@ func (h *Handler) UploadFile(c echo.Context) error {
 
 	fileID := uuid.New().String()
 	originalName := fileHeader.Filename
+	ext := strings.ToLower(filepath.Ext(originalName))
+
+	// Validate extension against whitelist to avoid stored XSS or remote execution payloads
+	if !allowedExtensions[ext] {
+		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "File type is not permitted", nil)
+	}
+
 	mimeType := fileHeader.Header.Get("Content-Type")
 	if mimeType == "" {
 		mimeType = http.DetectContentType(data)
 	}
+
+	userID := auth.GetUserID(c)
+	log.Printf("[upload] user=%s uploaded filename=%q size=%d mime=%s", userID, originalName, fileHeader.Size, mimeType)
 
 	fileType := "file"
 	if strings.HasPrefix(mimeType, "image/") {

@@ -215,7 +215,16 @@ func main() {
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")
 	api.POST("/upload", uploadHandler.UploadFile, auth.JWTMiddleware(jwtMgr))
-	e.Static("/uploads", "uploads")
+
+	// Enforce security headers on user-uploaded assets to prevent MIME-confusion and inline script execution
+	uploadsGroup := e.Group("/uploads", func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			c.Response().Header().Set("Content-Security-Policy", "default-src 'none'; media-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'")
+			return next(c)
+		}
+	})
+	uploadsGroup.Static("", "uploads")
 
 	// Serve frontend SPA web assets if present
 	if _, err := os.Stat("web/dist"); err == nil {
