@@ -11,28 +11,34 @@ export async function decodeAudioFile(file: File): Promise<{
   const arrayBuffer = await file.arrayBuffer()
   const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext
   const ctx = new AudioContextClass()
-  const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
+  try {
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer)
 
-  // Generate 60 normalized waveform peak bars
-  const rawData = audioBuffer.getChannelData(0)
-  const samples = 60
-  const blockSize = Math.floor(rawData.length / samples)
-  const peaks: number[] = []
+    // Generate 60 normalized waveform peak bars
+    const rawData = audioBuffer.getChannelData(0)
+    const samples = 60
+    const blockSize = Math.floor(rawData.length / samples)
+    const peaks: number[] = []
 
-  for (let i = 0; i < samples; i++) {
-    let max = 0
-    const start = i * blockSize
-    for (let j = 0; j < blockSize; j += 10) {
-      const val = Math.abs(rawData[start + j] || 0)
-      if (val > max) max = val
+    for (let i = 0; i < samples; i++) {
+      let max = 0
+      const start = i * blockSize
+      for (let j = 0; j < blockSize; j += 10) {
+        const val = Math.abs(rawData[start + j] || 0)
+        if (val > max) max = val
+      }
+      peaks.push(Math.max(0.15, Math.min(1.0, max * 1.6)))
     }
-    peaks.push(Math.max(0.15, Math.min(1.0, max * 1.6)))
-  }
 
-  return {
-    audioBuffer,
-    duration: audioBuffer.duration,
-    peaks,
+    return {
+      audioBuffer,
+      duration: audioBuffer.duration,
+      peaks,
+    }
+  } finally {
+    try {
+      await ctx.close()
+    } catch {}
   }
 }
 

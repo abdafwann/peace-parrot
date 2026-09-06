@@ -79,6 +79,13 @@ func (h *Handler) UpdateServerSettings(c echo.Context) error {
 	if req.Name == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "server name is required"})
 	}
+	if len(req.Name) > 100 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "server name must not exceed 100 characters"})
+	}
+	req.Description = strings.TrimSpace(req.Description)
+	if len(req.Description) > 2000 {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "description must not exceed 2000 characters"})
+	}
 
 	if err := h.serverStore.UpdateServerSettings(req.Name, req.Description, req.SlowModeSeconds); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update server settings"})

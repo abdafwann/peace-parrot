@@ -128,3 +128,19 @@ func CORSMiddleware(allowedOrigins ...string) echo.MiddlewareFunc {
 		}
 	}
 }
+
+// SecurityHeadersMiddleware sets standard HTTP security headers
+func SecurityHeadersMiddleware() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			c.Response().Header().Set("X-Frame-Options", "DENY")
+			c.Response().Header().Set("X-XSS-Protection", "1; mode=block")
+			c.Response().Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			if c.Request().TLS != nil {
+				c.Response().Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			return next(c)
+		}
+	}
+}

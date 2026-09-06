@@ -29,7 +29,6 @@ import (
 	dbpkg "github.com/abdafwann/peace-parrot/pkg/database"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
-	echomiddleware "github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
@@ -118,8 +117,8 @@ func main() {
 
 	// Global middleware
 	e.Use(middleware.PanicRecoveryMiddleware)
-	e.Use(echomiddleware.Recover())
 	e.Use(middleware.RequestLoggerMiddleware)
+	e.Use(middleware.SecurityHeadersMiddleware())
 	e.Use(middleware.CORSMiddleware(cfg.Server.AllowedOrigins...))
 
 	// Health check endpoint
@@ -159,10 +158,15 @@ func main() {
 	api.POST("/users/me/avatar", userHandler.UploadAvatar, auth.JWTMiddleware(jwtMgr))
 	api.POST("/users/me/banner", userHandler.UploadBanner, auth.JWTMiddleware(jwtMgr))
 
+	// Rate limiters
+	registerLimiter := auth.NewRateLimiter(5, time.Minute)
+	uploadLimiter := auth.NewRateLimiter(15, time.Minute)
+	searchLimiter := auth.NewRateLimiter(30, time.Minute)
+
 	// Auth routes (public)
 	authGroup := api.Group("/auth")
 	authGroup.POST("/login", authHandler.Login)
-	authGroup.POST("/register", authHandler.Register)
+	authGroup.POST("/register", authHandler.Register, auth.RateLimitMiddleware(registerLimiter))
 
 	// Invites routes
 	api.GET("/invites/validate/:code", inviteHandler.Validate)
@@ -174,7 +178,6 @@ func main() {
 	channels.GET("", channelHandler.List)
 	channels.POST("", channelHandler.Create, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
 	channels.PATCH("/reorder", channelHandler.Reorder, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
-	channels.POST("/reorder", channelHandler.Reorder, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
 	channels.GET("/:id", channelHandler.Get)
 	channels.PATCH("/:id", channelHandler.Update, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
 	channels.DELETE("/:id", channelHandler.Delete, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
@@ -193,7 +196,7 @@ func main() {
 	messages.Use(auth.JWTMiddleware(jwtMgr))
 	messages.PATCH("/:id", messageHandler.Update)
 	messages.DELETE("/:id", messageHandler.Delete)
-	messages.GET("/search", messageHandler.Search)
+	messages.GET("/search", messageHandler.Search, auth.RateLimitMiddleware(searchLimiter))
 
 	// Reaction routes
 	messages.POST("/:id/reactions", reactionHandler.AddReaction)
@@ -217,7 +220,7 @@ func main() {
 
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")
-	api.POST("/upload", uploadHandler.UploadFile, auth.JWTMiddleware(jwtMgr))
+	api.POST("/upload", uploadHandler.UploadFile, auth.JWTMiddleware(jwtMgr), auth.RateLimitMiddleware(uploadLimiter))
 	e.Static("/uploads", "uploads")
 
 	// Serve frontend SPA web assets if present

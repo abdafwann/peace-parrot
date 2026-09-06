@@ -5,7 +5,7 @@ import { useVoiceStore } from '../stores/voiceStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useServerStore } from '../stores/serverStore'
 import { RoleBadge } from './RoleBadge'
-import { apiFetch } from '../utils/config'
+import { apiFetch, getOptimizedImageUrl } from '../utils/config'
 
 export interface Member {
   id: string
@@ -184,34 +184,47 @@ export function MemberList() {
   // Group online members dynamically by custom roles
   const roleCategories = useMemo(() => {
     const nonOffline = filteredMembers.filter((m) => m.status !== 'offline')
-    const grouped: { role: string; color?: string; iconUrl?: string; members: Member[] }[] = []
-
     const knownRoles = roles.length > 0 ? roles : [
       { id: 'role-admin', name: 'Admin', color: '#f0b232', iconUrl: '👑' },
       { id: 'role-mod', name: 'Moderator', color: '#23a559', iconUrl: '🛡️' },
       { id: 'role-member', name: 'Member', color: '#949ba4', iconUrl: '' },
     ]
 
-    const handledUserIds = new Set<string>()
+    const roleMap = new Map<string, typeof knownRoles[0]>()
+    for (const r of knownRoles) {
+      if (r.name.toLowerCase() !== 'member') {
+        roleMap.set(r.name.toLowerCase(), r)
+      }
+    }
+
+    const groups = new Map<string, Member[]>()
+    const standardOnline: Member[] = []
+
+    for (const m of nonOffline) {
+      const lowerRole = m.role?.toLowerCase() || ''
+      if (lowerRole && roleMap.has(lowerRole)) {
+        const canonicalName = roleMap.get(lowerRole)!.name
+        const existing = groups.get(canonicalName) || []
+        existing.push(m)
+        groups.set(canonicalName, existing)
+      } else {
+        standardOnline.push(m)
+      }
+    }
+
+    const grouped: { role: string; color?: string; iconUrl?: string; members: Member[] }[] = []
 
     for (const r of knownRoles) {
-      if (r.name.toLowerCase() === 'member') continue
-      const roleMembers = nonOffline.filter(
-        (m) => m.role?.toLowerCase() === r.name.toLowerCase() && !handledUserIds.has(m.id)
-      )
-      if (roleMembers.length > 0) {
-        roleMembers.forEach((m) => handledUserIds.add(m.id))
+      if (groups.has(r.name)) {
         grouped.push({
           role: r.name,
           color: r.color,
           iconUrl: r.iconUrl,
-          members: roleMembers,
+          members: groups.get(r.name)!,
         })
       }
     }
 
-    // Standard Online category
-    const standardOnline = nonOffline.filter((m) => !handledUserIds.has(m.id))
     if (standardOnline.length > 0) {
       grouped.push({
         role: 'Online',
@@ -409,7 +422,13 @@ function MemberItem({ member, inVoice, roleColor, isOffline }: MemberItemProps) 
           }}
         >
           {member.avatarUrl ? (
-            <img src={member.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            <img
+              src={getOptimizedImageUrl(member.avatarUrl, 64, 64)}
+              alt={displayName}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover"
+            />
           ) : (
             initial
           )}

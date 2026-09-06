@@ -1,14 +1,34 @@
 package auth
 
 import (
+	"net/http"
 	"sync"
 	"time"
+
+	"github.com/abdafwann/peace-parrot/pkg/middleware"
+	"github.com/labstack/echo/v4"
 )
 
 const (
-	DefaultRateLimit       = 5
-	DefaultRateWindow     = time.Minute
+	DefaultRateLimit   = 5
+	DefaultRateWindow = time.Minute
 )
+
+// RateLimitMiddleware creates an Echo middleware from a RateLimiter
+func RateLimitMiddleware(rl *RateLimiter) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			key := c.RealIP()
+			if key == "" {
+				key = c.Request().RemoteAddr
+			}
+			if !rl.Allow(key) {
+				return middleware.WriteError(c, http.StatusTooManyRequests, "RATE_LIMIT_EXCEEDED", "Too many requests, please try again later", nil)
+			}
+			return next(c)
+		}
+	}
+}
 
 // RateLimiter implements in-memory rate limiting
 type RateLimiter struct {

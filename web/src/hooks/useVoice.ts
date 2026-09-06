@@ -121,13 +121,14 @@ export function useSpeakingDetection(
     const dataArray = new Uint8Array(analyser.frequencyBinCount)
 
     let isSpeaking = false
-    let animationFrameId: number | null = null
 
-    const detect = () => {
+    const intervalId = setInterval(() => {
       analyser.getByteFrequencyData(dataArray)
 
-      // Calculate average frequency
-      const sum = dataArray.reduce((a, b) => a + b, 0)
+      let sum = 0
+      for (let i = 0; i < dataArray.length; i++) {
+        sum += dataArray[i]
+      }
       const avg = sum / dataArray.length
 
       const nowSpeaking = avg > threshold
@@ -136,22 +137,10 @@ export function useSpeakingDetection(
         isSpeaking = nowSpeaking
         onSpeakingChange(userId, isSpeaking)
       }
-
-      animationFrameId = requestAnimationFrame(detect)
-    }
-
-    // Use setInterval as specified (100ms interval)
-    const intervalId = setInterval(() => {
-      if (animationFrameId === null) {
-        detect()
-      }
     }, interval)
 
     return () => {
       clearInterval(intervalId)
-      if (animationFrameId) {
-        cancelAnimationFrame(animationFrameId)
-      }
       source.disconnect()
       audioContext.close()
     }

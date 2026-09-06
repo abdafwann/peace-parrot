@@ -278,6 +278,8 @@ if (typeof window !== 'undefined') {
   })
 }
 
+const typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
+
 // Helper to handle incoming messages
 function handleMessage(message: WSMessage) {
   const { messageHandlers, typingUsers } = useWebSocketStore.getState()
@@ -368,6 +370,24 @@ function handleMessage(message: WSMessage) {
     const channelId = (payload.channelId || message.channelId) as string
 
     if (userId && channelId) {
+      const timeoutKey = `${channelId}:${userId}`
+      const existingTimeout = typingTimeouts.get(timeoutKey)
+      if (existingTimeout) {
+        clearTimeout(existingTimeout)
+      }
+
+      const timer = setTimeout(() => {
+        typingTimeouts.delete(timeoutKey)
+        const current = useWebSocketStore.getState().typingUsers[channelId] || []
+        useWebSocketStore.setState({
+          typingUsers: {
+            ...useWebSocketStore.getState().typingUsers,
+            [channelId]: current.filter((u) => u.userId !== userId),
+          },
+        })
+      }, 7000)
+      typingTimeouts.set(timeoutKey, timer)
+
       const current = typingUsers[channelId] || []
       if (!current.some((u) => u.userId === userId)) {
         useWebSocketStore.setState({
@@ -386,6 +406,13 @@ function handleMessage(message: WSMessage) {
     const channelId = (payload.channelId || message.channelId) as string
 
     if (userId && channelId) {
+      const timeoutKey = `${channelId}:${userId}`
+      const existingTimeout = typingTimeouts.get(timeoutKey)
+      if (existingTimeout) {
+        clearTimeout(existingTimeout)
+        typingTimeouts.delete(timeoutKey)
+      }
+
       const current = typingUsers[channelId] || []
       useWebSocketStore.setState({
         typingUsers: {

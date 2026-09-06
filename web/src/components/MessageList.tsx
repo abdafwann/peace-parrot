@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { useChannelStore } from '../stores/channelStore'
 import { useAuthStore } from '../stores/authStore'
-import { apiFetch } from '../utils/config'
+import { apiFetch, getOptimizedImageUrl } from '../utils/config'
 import { useServerStore } from '../stores/serverStore'
 import { useWebSocketStore, type WSMessage } from '../stores/websocketStore'
 import { format } from 'date-fns'
@@ -383,6 +383,10 @@ export function MessageList() {
     )
   }, [])
 
+  const handleOpenLightbox = useCallback((url: string, filename?: string) => {
+    setLightboxImage({ url, filename })
+  }, [])
+
   return (
     <>
       {/* Messages */}
@@ -426,7 +430,7 @@ export function MessageList() {
                   usersMap={usersMap}
                   roles={roles}
                   isStacked={isStacked}
-                  onOpenLightbox={(url, filename) => setLightboxImage({ url, filename })}
+                  onOpenLightbox={handleOpenLightbox}
                   onUpdateReactions={handleUpdateReactions}
                 />
               )
@@ -447,7 +451,7 @@ export function MessageList() {
   )
 }
 
-function MessageItem({
+const MessageItem = memo(function MessageItem({
   message,
   usersMap,
   roles,
@@ -627,7 +631,13 @@ function MessageItem({
                 }}
               >
                 {message.authorAvatarUrl ? (
-                  <img src={message.authorAvatarUrl} alt={message.authorName || 'Avatar'} className="w-full h-full object-cover" />
+                  <img
+                    src={getOptimizedImageUrl(message.authorAvatarUrl, 80, 80)}
+                    alt={message.authorName || 'Avatar'}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   (message.authorName || 'U')[0].toUpperCase()
                 )}
@@ -819,4 +829,4 @@ function MessageItem({
       </div>
     </div>
   )
-}
+})

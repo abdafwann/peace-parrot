@@ -23,6 +23,7 @@ import { useVoiceCleanup } from '../hooks/useVoice'
 import { UserSettingsModal } from './UserSettingsModal'
 import { SoundboardModal } from './SoundboardModal'
 import { playSoundEffect } from '../utils/soundEffects'
+import { getOptimizedImageUrl } from '../utils/config'
 import { playSoundboardEffect } from '../utils/soundboardAudio'
 import { toast } from '../stores/toastStore'
 import { APP_VERSION } from '../utils/config'
@@ -223,7 +224,13 @@ export function BottomSidebar() {
               }}
             >
               {user?.avatarUrl ? (
-                <img src={user.avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                <img
+                  src={getOptimizedImageUrl(user.avatarUrl, 64, 64)}
+                  alt="Avatar"
+                  loading="lazy"
+                  decoding="async"
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 (user?.displayName || user?.username || 'U')[0].toUpperCase()
               )}
