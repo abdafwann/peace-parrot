@@ -221,11 +221,25 @@ func main() {
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")
 	api.POST("/upload", uploadHandler.UploadFile, auth.JWTMiddleware(jwtMgr), auth.RateLimitMiddleware(uploadLimiter))
-	e.Static("/uploads", "uploads")
+
+	uploadsGroup := e.Group("/uploads", func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set("Cache-Control", "public, max-age=604800")
+			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
+			return next(c)
+		}
+	})
+	uploadsGroup.Static("", "uploads")
 
 	// Serve frontend SPA web assets if present
 	if _, err := os.Stat("web/dist"); err == nil {
-		e.Static("/assets", "web/dist/assets")
+		assetsGroup := e.Group("/assets", func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				return next(c)
+			}
+		})
+		assetsGroup.Static("", "web/dist/assets")
 		e.GET("/*", func(c echo.Context) error {
 			path := c.Request().URL.Path
 			// Do not intercept API, WebSocket, or Uploads endpoints

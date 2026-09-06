@@ -53,8 +53,8 @@ function getAudioContext(): AudioContext {
   return audioCtx
 }
 
-// Reactively adjust active custom sounds when slider moves
-useSettingsStore.subscribe((state) => {
+// Persistent module singleton subscription to synchronize active soundboard playback volume with settings
+let unsubscribeSettings: (() => void) | null = useSettingsStore.subscribe((state) => {
   const percent = state.soundboardVolume ?? 80
   const vol = Math.max(0, Math.min(1, percent / 100))
   if (currentPlayingAudio) {
@@ -64,6 +64,21 @@ useSettingsStore.subscribe((state) => {
     }
   }
 })
+
+export function cleanupSoundboardAudio() {
+  if (unsubscribeSettings) {
+    unsubscribeSettings()
+    unsubscribeSettings = null
+  }
+  if (currentPlayingAudio) {
+    currentPlayingAudio.pause()
+    currentPlayingAudio = null
+  }
+  if (audioCtx && audioCtx.state !== 'closed') {
+    audioCtx.close().catch(() => {})
+    audioCtx = null
+  }
+}
 
 export function setSoundboardVolume(volPercent: number) {
   useSettingsStore.getState().updateSettings({

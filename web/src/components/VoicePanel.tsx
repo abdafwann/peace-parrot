@@ -38,18 +38,13 @@ export function VoicePanel() {
     return state.channels.find(c => c.id === id)
   })
 
-  // Debug logging
-  console.log('[VoicePanel] isInVoice:', isInVoice, 'activeChannel:', activeChannel?.name, 'type:', activeChannel?.type)
-
   // Only show when in voice AND viewing a text channel
   // When viewing a voice channel, participants are shown in the channel list instead
   if (!isInVoice || activeChannel?.type === 'voice') {
-    console.log('[VoicePanel] Returning null (hidden)')
     return null
   }
 
   const participantCount = participants.size
-  console.log('[VoicePanel] Rendering panel with', participantCount, 'participants')
 
   const [activeVolumeUser, setActiveVolumeUser] = useState<{
     userId: string

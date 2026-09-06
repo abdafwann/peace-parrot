@@ -11,15 +11,44 @@ export interface User {
   role?: string
 }
 
+export interface RawUserData {
+  id?: string
+  ID?: string
+  username?: string
+  Username?: string
+  displayName?: string
+  DisplayName?: string
+  avatarUrl?: string
+  AvatarURL?: string
+  bannerUrl?: string
+  BannerURL?: string
+  bio?: string
+  Bio?: string
+  role?: string
+  Role?: string
+}
+
+function normalizeUser(raw: RawUserData): User {
+  const username = raw.username || raw.Username || ''
+  return {
+    id: raw.id || raw.ID || '',
+    username,
+    displayName: raw.displayName || raw.DisplayName || username || 'User',
+    avatarUrl: raw.avatarUrl || raw.AvatarURL,
+    bannerUrl: raw.bannerUrl || raw.BannerURL,
+    bio: raw.bio || raw.Bio,
+    role: raw.role || raw.Role || 'Member',
+  }
+}
+
 export interface AuthState {
   user: User | null
   token: string | null
   isAuthenticated: boolean
 
-  // Actions
-  login: (user: User, token: string) => void
+  login: (user: RawUserData | User, token: string) => void
   logout: () => void
-  setUser: (user: User) => void
+  setUser: (user: RawUserData | User) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -30,21 +59,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
 
       login: (rawUser, token) => {
-        const u: User = {
-          id: (rawUser as any)?.id || (rawUser as any)?.ID || '',
-          username: (rawUser as any)?.username || (rawUser as any)?.Username || '',
-          displayName:
-            (rawUser as any)?.displayName ||
-            (rawUser as any)?.DisplayName ||
-            (rawUser as any)?.username ||
-            (rawUser as any)?.Username ||
-            'User',
-          avatarUrl: (rawUser as any)?.avatarUrl || (rawUser as any)?.AvatarURL,
-          bannerUrl: (rawUser as any)?.bannerUrl || (rawUser as any)?.BannerURL,
-          bio: (rawUser as any)?.bio || (rawUser as any)?.Bio,
-          role: (rawUser as any)?.role || (rawUser as any)?.Role || 'Member',
-        }
-        set({ user: u, token, isAuthenticated: true })
+        set({ user: normalizeUser(rawUser), token, isAuthenticated: true })
       },
 
       logout: () => {
@@ -52,21 +67,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       setUser: (rawUser) => {
-        const u: User = {
-          id: (rawUser as any)?.id || (rawUser as any)?.ID || '',
-          username: (rawUser as any)?.username || (rawUser as any)?.Username || '',
-          displayName:
-            (rawUser as any)?.displayName ||
-            (rawUser as any)?.DisplayName ||
-            (rawUser as any)?.username ||
-            (rawUser as any)?.Username ||
-            'User',
-          avatarUrl: (rawUser as any)?.avatarUrl || (rawUser as any)?.AvatarURL,
-          bannerUrl: (rawUser as any)?.bannerUrl || (rawUser as any)?.BannerURL,
-          bio: (rawUser as any)?.bio || (rawUser as any)?.Bio,
-          role: (rawUser as any)?.role || (rawUser as any)?.Role || 'Member',
-        }
-        set({ user: u })
+        set({ user: normalizeUser(rawUser) })
       },
     }),
     {

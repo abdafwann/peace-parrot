@@ -1,7 +1,6 @@
 import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
-import { useMessageStore } from './messageStore'
 import { useVoiceStore } from './voiceStore'
 
 export type WSEventType =
@@ -292,75 +291,6 @@ function handleMessage(message: WSMessage) {
       console.error('[WS] Error in message handler:', e)
     }
   })
-
-  // Handle message events in messageStore
-  const messageStore = useMessageStore.getState()
-
-  if (message.type === 'message') {
-    const payload = (message.payload || {}) as Record<string, any>
-    const nested = payload.message as Record<string, any> | undefined
-
-    const channelId = (payload.channelId || message.channelId || nested?.channelId) as string
-    const id = (nested?.id || payload.id) as string
-    const authorId = (nested?.authorId || payload.authorId) as string
-    const content = (nested?.content || payload.content) as string
-    const createdAt = (nested?.createdAt || payload.createdAt || new Date().toISOString()) as string
-
-    if (channelId && id) {
-      messageStore.addMessage(channelId, {
-        id,
-        channelId,
-        authorId: authorId || '',
-        content: content || '',
-        createdAt,
-      })
-    }
-  }
-
-  if (message.type === 'message_edit') {
-    const payload = (message.payload || {}) as Record<string, any>
-    const channelId = (payload.channelId || message.channelId) as string
-    const messageId = (payload.messageId || payload.id) as string
-    const content = payload.content as string
-
-    if (channelId && messageId && content !== undefined) {
-      messageStore.updateMessage(channelId, messageId, content)
-    }
-  }
-
-  if (message.type === 'message_delete') {
-    const payload = (message.payload || {}) as Record<string, any>
-    const channelId = (payload.channelId || message.channelId) as string
-    const messageId = (payload.messageId || payload.id) as string
-
-    if (channelId && messageId) {
-      messageStore.removeMessage(channelId, messageId)
-    }
-  }
-
-  if (message.type === 'reaction_add') {
-    const payload = (message.payload || {}) as Record<string, any>
-    const messageId = payload.messageId as string
-    const emoji = payload.emoji as string
-    const user = (payload.user || (payload.userId ? { id: payload.userId, username: 'User' } : undefined)) as
-      | { id: string; username: string }
-      | undefined
-
-    if (messageId && emoji && user) {
-      messageStore.addReaction(messageId, emoji, user)
-    }
-  }
-
-  if (message.type === 'reaction_remove') {
-    const payload = (message.payload || {}) as Record<string, any>
-    const messageId = payload.messageId as string
-    const emoji = payload.emoji as string
-    const userId = (payload.userId || payload.user?.id) as string
-
-    if (messageId && emoji && userId) {
-      messageStore.removeReaction(messageId, emoji, userId)
-    }
-  }
 
   // Handle typing events
   if (message.type === 'typing_start') {

@@ -106,3 +106,10 @@ export function showDesktopNotification(title: string, options?: NotificationOpt
     console.warn('[Notification] Failed to show desktop notification:', err)
   }
 }
+
+export function cleanupSoundEffects() {
+  if (audioCtx && audioCtx.state !== 'closed') {
+    audioCtx.close().catch(() => {})
+    audioCtx = null
+  }
+}

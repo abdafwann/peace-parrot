@@ -198,9 +198,6 @@ export function getOptimizedImageUrl(url?: string, width: number = 80, height: n
   return url.replace('/upload/', `/upload/c_fill,w_${width},h_${height},f_auto,q_auto/`)
 }
 
-// Automatically trigger probe in background on startup
 if (typeof window !== 'undefined') {
-  setTimeout(() => {
-    probeAndAutoFallbackEndpoint().catch(() => {})
-  }, 100)
+  probeAndAutoFallbackEndpoint().catch(() => {})
 }

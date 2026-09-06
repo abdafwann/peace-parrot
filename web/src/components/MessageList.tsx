@@ -172,8 +172,6 @@ export function MessageList() {
   // Subscribe to WebSocket messages
   useEffect(() => {
     const unsubscribe = subscribe((message: WSMessage) => {
-      console.log('[MessageList] WS event:', message.type, 'payload:', message.payload)
-
       if (message.type === 'presence_sync' || message.type === 'user_presence' || message.type === 'user_role_updated') {
         fetchUsers()
       }
@@ -193,7 +191,6 @@ export function MessageList() {
         const createdAt = (nested?.createdAt || payload.createdAt || new Date().toISOString()) as string
 
         if (channelId === activeChannelId && id) {
-          console.log('[MessageList] Adding message to list:', id)
           const currentUserId = useAuthStore.getState().user?.id
           if (authorId && authorId !== currentUserId) {
             playSoundEffect('message')
