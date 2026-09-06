@@ -26,11 +26,7 @@ export function Layout({ children }: LayoutProps) {
   const [showCreateChannel, setShowCreateChannel] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
-  const isAdmin =
-    currentUser?.role === 'Admin' ||
-    currentUser?.username?.toLowerCase() === 'afwan' ||
-    currentUser?.username?.toLowerCase() === 'admin' ||
-    currentUser?.username?.toLowerCase() === 'gremiwo'
+  const isAdmin = currentUser?.role?.toLowerCase() === 'admin'
 
   useEffect(() => {
     fetchSettings()

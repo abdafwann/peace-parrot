@@ -37,11 +37,7 @@ export function ChannelList() {
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
 
-  const isAdmin =
-    user?.role === 'Admin' ||
-    user?.username?.toLowerCase() === 'afwan' ||
-    user?.username?.toLowerCase() === 'admin' ||
-    user?.username?.toLowerCase() === 'gremiwo'
+  const isAdmin = user?.role?.toLowerCase() === 'admin'
 
   const textChannels = channels.filter((c) => c.type === 'text')
   const voiceChannels = channels.filter((c) => c.type === 'voice')

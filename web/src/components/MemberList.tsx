@@ -97,22 +97,10 @@ export function MemberList() {
     }
   }
 
-  // Initial fetch for roles & users
   useEffect(() => {
     fetchRoles()
     fetchUsers()
   }, [currentUser])
-
-  // Periodic polling & focus listener to ensure member list is always 100% updated in real-time
-  useEffect(() => {
-    const interval = setInterval(fetchUsers, 5000)
-    const handleFocus = () => fetchUsers()
-    window.addEventListener('focus', handleFocus)
-    return () => {
-      clearInterval(interval)
-      window.removeEventListener('focus', handleFocus)
-    }
-  }, [])
 
   // Listen for real-time WebSocket presence & role updates
   useEffect(() => {
@@ -166,7 +154,7 @@ export function MemberList() {
       const isSelf = (currentId && lowerId === currentId) || (currentName && lowerName === currentName)
       const isOnline = isSelf || onlineUserIds.has(lowerId) || onlineUserIds.has(lowerName)
 
-      let role: string = u.role || (index === 0 || lowerName === 'afwan' || lowerName === 'admin' ? 'Admin' : 'Member')
+      let role: string = u.role || 'Member'
 
       return {
         id,

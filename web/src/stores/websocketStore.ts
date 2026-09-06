@@ -59,6 +59,7 @@ interface WebSocketState {
   isConnecting: boolean
   error: string | null
   socket: WebSocket | null
+  reconnectTimer: ReturnType<typeof setTimeout> | null
 
   // Typing state
   typingUsers: Record<string, TypingUser[]> // channelId -> typing users
@@ -91,11 +92,17 @@ export const useWebSocketStore = create<WebSocketState>()(
       isConnecting: false,
       error: null,
       socket: null,
+      reconnectTimer: null,
       typingUsers: {},
       messageHandlers: new Set(),
 
       connect: (token: string) => {
-        const { socket, isConnecting } = get()
+        const { socket, isConnecting, reconnectTimer } = get()
+
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer)
+          set({ reconnectTimer: null })
+        }
 
         // Don't connect if already connected or connecting
         if (socket?.readyState === WebSocket.OPEN || isConnecting) return
@@ -106,7 +113,7 @@ export const useWebSocketStore = create<WebSocketState>()(
 
         try {
           console.log('[WS] Connecting to:', currentWsUrl)
-          const ws = new WebSocket(`${currentWsUrl}?token=${token}`)
+          const ws = new WebSocket(currentWsUrl, ['roompeak-auth', token])
 
           ws.onopen = () => {
             console.log('[WS] Connected successfully to:', currentWsUrl)
@@ -147,10 +154,11 @@ export const useWebSocketStore = create<WebSocketState>()(
             // Don't reconnect if manually closed
             if (event.code !== 1000) {
               console.log('[WS] Reconnecting in', RECONNECT_DELAY, 'ms')
-              setTimeout(() => {
+              const timer = setTimeout(() => {
                 const currentToken = getTokenFromStore()
                 if (currentToken) get().connect(currentToken)
               }, RECONNECT_DELAY)
+              set({ reconnectTimer: timer })
             } else {
               console.log('[WS] Not reconnecting - user disconnected')
             }
@@ -185,11 +193,14 @@ export const useWebSocketStore = create<WebSocketState>()(
       },
 
       disconnect: () => {
-        const { socket } = get()
+        const { socket, reconnectTimer } = get()
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer)
+        }
         if (socket) {
           socket.close(1000, 'User logged out')
-          set({ socket: null, isConnected: false, isConnecting: false, pendingMessages: [] })
         }
+        set({ socket: null, isConnected: false, isConnecting: false, pendingMessages: [], reconnectTimer: null })
       },
 
       send: (message: WSMessage) => {

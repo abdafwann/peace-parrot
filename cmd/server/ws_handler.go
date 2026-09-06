@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/internal/message"
@@ -15,36 +16,79 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-var upgrader = gws.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true // Allow all origins for development
-	},
-}
-
 // WebSocketHandler handles WebSocket connections
 type WebSocketHandler struct {
 	hub            *websocket.Hub
 	voiceHandler   *voice.Handler
 	messageHandler *message.Handler
 	jwtMgr         *auth.JWTManager
+	upgrader       gws.Upgrader
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
-func NewWebSocketHandler(hub *websocket.Hub, voiceHandler *voice.Handler, messageHandler *message.Handler, jwtMgr *auth.JWTManager) *WebSocketHandler {
+func NewWebSocketHandler(hub *websocket.Hub, voiceHandler *voice.Handler, messageHandler *message.Handler, jwtMgr *auth.JWTManager, allowedOrigins []string) *WebSocketHandler {
+	allowAll := false
+	for _, o := range allowedOrigins {
+		if o == "*" {
+			allowAll = true
+			break
+		}
+	}
+
+	u := gws.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			if allowAll || len(allowedOrigins) == 0 {
+				return true
+			}
+			origin := r.Header.Get("Origin")
+			if origin == "" {
+				return true
+			}
+			for _, o := range allowedOrigins {
+				if origin == o {
+					return true
+				}
+			}
+			return false
+		},
+	}
+
 	return &WebSocketHandler{
 		hub:            hub,
 		voiceHandler:   voiceHandler,
 		messageHandler: messageHandler,
 		jwtMgr:         jwtMgr,
+		upgrader:       u,
 	}
 }
 
 // HandleWebSocket handles incoming WebSocket connections
 func (h *WebSocketHandler) HandleWebSocket(c echo.Context) error {
-	// Get token from query parameter
 	token := c.QueryParam("token")
+	var subprotocol string
+
+	if token == "" {
+		protocols := c.Request().Header.Get("Sec-WebSocket-Protocol")
+		if protocols != "" {
+			parts := strings.Split(protocols, ",")
+			if len(parts) >= 2 {
+				subprotocol = strings.TrimSpace(parts[0])
+				token = strings.TrimSpace(parts[1])
+			} else if len(parts) == 1 {
+				token = strings.TrimSpace(parts[0])
+			}
+		}
+	}
+
+	if token == "" {
+		authHeader := c.Request().Header.Get("Authorization")
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+	}
+
 	if token == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "token required"})
 	}
@@ -61,8 +105,13 @@ func (h *WebSocketHandler) HandleWebSocket(c echo.Context) error {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token: no user ID"})
 	}
 
+	var responseHeader http.Header
+	if subprotocol != "" {
+		responseHeader = http.Header{"Sec-WebSocket-Protocol": []string{subprotocol}}
+	}
+
 	// Upgrade HTTP connection to WebSocket
-	conn, err := upgrader.Upgrade(c.Response(), c.Request(), nil)
+	conn, err := h.upgrader.Upgrade(c.Response(), c.Request(), responseHeader)
 	if err != nil {
 		log.Printf("WebSocket: Upgrade failed: %v", err)
 		return err

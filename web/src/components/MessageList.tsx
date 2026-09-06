@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useChannelStore } from '../stores/channelStore'
 import { useAuthStore } from '../stores/authStore'
 import { apiFetch } from '../utils/config'
@@ -84,6 +84,10 @@ export function MessageList() {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [usersMap, setUsersMap] = useState<Record<string, any>>({})
+  const usersMapRef = useRef<Record<string, any>>({})
+  useEffect(() => {
+    usersMapRef.current = usersMap
+  }, [usersMap])
   const roles = useServerStore((state) => state.roles)
   const fetchRoles = useServerStore((state) => state.fetchRoles)
   const subscribe = useWebSocketStore((s) => s.subscribe)
@@ -131,7 +135,7 @@ export function MessageList() {
       .then((data) => {
         if (Array.isArray(data)) {
           const normalized: Message[] = data.map((item: any) => {
-            const authorObj = item.authorId ? usersMap[item.authorId] : undefined
+            const authorObj = item.authorId ? usersMapRef.current[item.authorId] : undefined
             return {
               id: item.id,
               channelId: item.channelId || item.channel_id,
@@ -163,7 +167,7 @@ export function MessageList() {
         console.error(err)
         setLoading(false)
       })
-  }, [activeChannelId, usersMap])
+  }, [activeChannelId])
 
   // Subscribe to WebSocket messages
   useEffect(() => {
@@ -181,7 +185,7 @@ export function MessageList() {
         const channelId = (payload.channelId || message.channelId || nested?.channelId) as string
         const id = (nested?.id || payload.id) as string
         const authorId = (nested?.authorId || payload.authorId) as string
-        const authorObj = authorId ? usersMap[authorId] : undefined
+        const authorObj = authorId ? usersMapRef.current[authorId] : undefined
         const authorName = (nested?.authorName || payload.authorName || authorObj?.displayName || authorObj?.username) as string | undefined
         const authorAvatarUrl = (nested?.authorAvatarUrl || payload.authorAvatarUrl || nested?.author_avatar_url || payload.author_avatar_url || authorObj?.avatarUrl) as string | undefined
         const content = (nested?.content || payload.content) as string
@@ -255,6 +259,10 @@ export function MessageList() {
         const channelId = (payload.channelId || message.channelId) as string
         const messageId = payload.messageId as string
         const emoji = payload.emoji as string
+        const senderId = payload.user?.id || payload.userId
+
+        const currentUserId = useAuthStore.getState().user?.id
+        if (senderId && senderId === currentUserId) return
 
         if (channelId === activeChannelId && messageId && emoji) {
           setMessages((prev) =>
@@ -287,6 +295,10 @@ export function MessageList() {
         const channelId = (payload.channelId || message.channelId) as string
         const messageId = payload.messageId as string
         const emoji = payload.emoji as string
+        const senderId = payload.userId || payload.user?.id
+
+        const currentUserId = useAuthStore.getState().user?.id
+        if (senderId && senderId === currentUserId) return
 
         if (channelId === activeChannelId && messageId && emoji) {
           setMessages((prev) =>
@@ -298,7 +310,7 @@ export function MessageList() {
                   reactions: reactions
                     .map((r) =>
                       r.emoji === emoji
-                        ? { ...r, count: r.count - 1, reacted: false }
+                        ? { ...r, count: r.count - 1 }
                         : r
                     )
                     .filter((r) => r.count > 0),
@@ -362,6 +374,15 @@ export function MessageList() {
     )
   }
 
+  // Optimistic reaction updates dispatched through parent state to prevent direct prop mutation
+  const handleUpdateReactions = useCallback((messageId: string, newReactions: Reaction[]) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId ? { ...msg, reactions: newReactions } : msg
+      )
+    )
+  }, [])
+
   return (
     <>
       {/* Messages */}
@@ -406,6 +427,7 @@ export function MessageList() {
                   roles={roles}
                   isStacked={isStacked}
                   onOpenLightbox={(url, filename) => setLightboxImage({ url, filename })}
+                  onUpdateReactions={handleUpdateReactions}
                 />
               )
             })}
@@ -431,12 +453,14 @@ function MessageItem({
   roles,
   isStacked = false,
   onOpenLightbox,
+  onUpdateReactions,
 }: {
   message: Message
   usersMap: Record<string, any>
   roles: any[]
   isStacked?: boolean
   onOpenLightbox: (url: string, filename?: string) => void
+  onUpdateReactions: (messageId: string, newReactions: Reaction[]) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [content, setContent] = useState(message.content)
@@ -473,37 +497,65 @@ function MessageItem({
   })()
 
   const handleAddReaction = async (emoji: string) => {
+    const prevReactions = [...reactions]
+    const existing = reactions.find((r) => r.emoji === emoji)
+    const nextReactions: Reaction[] = existing
+      ? reactions.map((r) =>
+          r.emoji === emoji ? { ...r, count: r.count + 1, reacted: true } : r
+        )
+      : [...reactions, { emoji, count: 1, reacted: true }]
+    onUpdateReactions(message.id, nextReactions)
+
     try {
-      await apiFetch(`/api/messages/${message.id}/reactions`, {
+      const res = await apiFetch(`/api/messages/${message.id}/reactions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ emoji }),
       })
-      // Optimistic update
-      const existing = reactions.find((r) => r.emoji === emoji)
-      if (existing) {
-        message.reactions = reactions.map((r) =>
-          r.emoji === emoji ? { ...r, count: r.count + 1, reacted: true } : r
-        )
-      } else {
-        message.reactions = [...reactions, { emoji, count: 1, reacted: true }]
+      if (!res.ok) {
+        throw new Error(`Failed to add reaction: ${res.statusText}`)
+      }
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        const syncedReactions: Reaction[] = data.map((item: any) => ({
+          emoji: item.emoji,
+          count: item.count,
+          reacted: Array.isArray(item.users) && item.users.some((u: any) => u.id === currentUserId),
+        }))
+        onUpdateReactions(message.id, syncedReactions)
       }
     } catch (err) {
       console.error('Failed to add reaction:', err)
+      onUpdateReactions(message.id, prevReactions)
     }
   }
 
   const handleRemoveReaction = async (emoji: string) => {
+    const prevReactions = [...reactions]
+    const nextReactions: Reaction[] = reactions
+      .map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, reacted: false } : r))
+      .filter((r) => r.count > 0)
+    onUpdateReactions(message.id, nextReactions)
+
     try {
-      await apiFetch(`/api/messages/${message.id}/reactions/${encodeURIComponent(emoji)}`, {
+      const res = await apiFetch(`/api/messages/${message.id}/reactions/${encodeURIComponent(emoji)}`, {
         method: 'DELETE',
       })
-      // Optimistic update
-      message.reactions = reactions
-        .map((r) => (r.emoji === emoji ? { ...r, count: r.count - 1, reacted: false } : r))
-        .filter((r) => r.count > 0)
+      if (!res.ok) {
+        throw new Error(`Failed to remove reaction: ${res.statusText}`)
+      }
+      const data = await res.json()
+      if (Array.isArray(data)) {
+        const syncedReactions: Reaction[] = data.map((item: any) => ({
+          emoji: item.emoji,
+          count: item.count,
+          reacted: Array.isArray(item.users) && item.users.some((u: any) => u.id === currentUserId),
+        }))
+        onUpdateReactions(message.id, syncedReactions)
+      }
     } catch (err) {
       console.error('Failed to remove reaction:', err)
+      onUpdateReactions(message.id, prevReactions)
     }
   }
 
@@ -513,6 +565,29 @@ function MessageItem({
       handleRemoveReaction(emoji)
     } else {
       handleAddReaction(emoji)
+    }
+  }
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    const trimmed = content.trim()
+    if (!trimmed || trimmed === message.content) {
+      setEditing(false)
+      return
+    }
+
+    try {
+      const res = await apiFetch(`/api/messages/${message.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: trimmed }),
+      })
+      if (!res.ok) {
+        throw new Error(`Failed to save message edit: ${res.statusText}`)
+      }
+      setEditing(false)
+    } catch (err) {
+      console.error('Failed to save message edit:', err)
     }
   }
 
@@ -744,9 +819,4 @@ function MessageItem({
       </div>
     </div>
   )
-
-  function handleSave() {
-    // TODO: Send edit to backend
-    setEditing(false)
-  }
 }

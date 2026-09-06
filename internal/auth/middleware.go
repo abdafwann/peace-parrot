@@ -80,10 +80,7 @@ func RequireAdminMiddleware(userStore interface {
 				return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "User not found", nil)
 			}
 
-			isAdmin := strings.EqualFold(u.Role, "Admin") ||
-				strings.EqualFold(u.Username, "afwan") ||
-				strings.EqualFold(u.Username, "admin") ||
-				strings.EqualFold(u.Username, "gremiwo")
+			isAdmin := strings.EqualFold(u.Role, "Admin")
 
 			if !isAdmin {
 				return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "Admin privileges required", nil)

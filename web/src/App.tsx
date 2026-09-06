@@ -10,7 +10,7 @@ import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocketStore, setTokenGetter } from './stores/websocketStore'
 import { useSFU } from './hooks/useSFU'
-import { apiFetch, API_BASE_URL, APP_VERSION } from './utils/config'
+import { apiFetch, getApiBaseUrl, APP_VERSION } from './utils/config'
 import { useState, useEffect } from 'react'
 import { Sun, Moon, Bird, Server, Settings2 } from 'lucide-react'
 
@@ -41,7 +41,7 @@ function ThemeToggle() {
 function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) {
   const [urlInviteCode, setUrlInviteCode] = useState('')
   const [showServerModal, setShowServerModal] = useState(false)
-  const [serverUrl, setServerUrl] = useState(API_BASE_URL)
+  const [serverUrl, setServerUrl] = useState(getApiBaseUrl())
 
   // Listen to server url change
   useEffect(() => {

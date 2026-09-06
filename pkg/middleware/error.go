@@ -88,10 +88,35 @@ func RequestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 }
 
 // CORS middleware for API endpoints
-func CORSMiddleware() echo.MiddlewareFunc {
+func CORSMiddleware(allowedOrigins ...string) echo.MiddlewareFunc {
+	origins := allowedOrigins
+	allowAll := false
+	for _, o := range origins {
+		if o == "*" {
+			allowAll = true
+			break
+		}
+	}
+
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			c.Response().Header().Set("Access-Control-Allow-Origin", "*")
+			reqOrigin := c.Request().Header.Get("Origin")
+			if allowAll || len(origins) == 0 {
+				if reqOrigin != "" {
+					c.Response().Header().Set("Access-Control-Allow-Origin", reqOrigin)
+				} else {
+					c.Response().Header().Set("Access-Control-Allow-Origin", "*")
+				}
+			} else {
+				for _, o := range origins {
+					if reqOrigin == o {
+						c.Response().Header().Set("Access-Control-Allow-Origin", reqOrigin)
+						c.Response().Header().Set("Vary", "Origin")
+						break
+					}
+				}
+			}
+
 			c.Response().Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
 			c.Response().Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 

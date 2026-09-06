@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Server, Globe, Check, AlertCircle, Loader2, X, RotateCcw, ArrowRight } from 'lucide-react'
 import {
-  API_BASE_URL,
+  getApiBaseUrl,
   DEFAULT_LOCAL_URL,
   setApiBaseUrl,
 } from '../utils/config'
@@ -12,15 +12,16 @@ interface ServerConnectionModalProps {
 }
 
 export function ServerConnectionModal({ isOpen, onClose }: ServerConnectionModalProps) {
-  const [currentUrl, setCurrentUrl] = useState(API_BASE_URL)
-  const [inputUrl, setInputUrl] = useState(API_BASE_URL)
+  const [currentUrl, setCurrentUrl] = useState(getApiBaseUrl())
+  const [inputUrl, setInputUrl] = useState(getApiBaseUrl())
   const [isTesting, setIsTesting] = useState(false)
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle')
   const [statusMessage, setStatusMessage] = useState('')
 
   useEffect(() => {
-    setCurrentUrl(API_BASE_URL)
-    setInputUrl(API_BASE_URL)
+    const url = getApiBaseUrl()
+    setCurrentUrl(url)
+    setInputUrl(url)
   }, [isOpen])
 
   // Listen to global changes

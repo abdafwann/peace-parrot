@@ -21,11 +21,38 @@ type RateLimiter struct {
 
 // NewRateLimiter creates a new rate limiter
 func NewRateLimiter(limit int, window time.Duration) *RateLimiter {
-	return &RateLimiter{
+	rl := &RateLimiter{
 		requests: make(map[string][]time.Time),
 		limit:    limit,
 		window:   window,
 		enabled:  true,
+	}
+
+	go rl.startCleanup(5 * time.Minute)
+
+	return rl
+}
+
+func (rl *RateLimiter) startCleanup(interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		windowStart := now.Add(-rl.window)
+		for key, timestamps := range rl.requests {
+			var valid []time.Time
+			for _, t := range timestamps {
+				if t.After(windowStart) {
+					valid = append(valid, t)
+				}
+			}
+			if len(valid) == 0 {
+				delete(rl.requests, key)
+			} else {
+				rl.requests[key] = valid
+			}
+		}
+		rl.mu.Unlock()
 	}
 }
 

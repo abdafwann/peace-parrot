@@ -35,6 +35,7 @@ export function useSFU() {
   const isRemoteSetRef = useRef(false)
   const localAudioContextRef = useRef<AudioContext | null>(null)
   const isPttPressedRef = useRef(false)
+  const speakingDetectionCleanupRef = useRef<(() => void) | null>(null)
 
   // WebRTC Connection Lifecycle
   useEffect(() => {
@@ -133,7 +134,8 @@ export function useSFU() {
 
         // 5. Setup Speaking Detection via AudioContext AnalyserNode
         if (stream.getAudioTracks().length > 0) {
-          setupSpeakingDetection(stream, activeChanId)
+          // Store cleanup handle to ensure the 50ms polling interval and AudioContext are cleanly disposed
+          speakingDetectionCleanupRef.current = setupSpeakingDetection(stream, activeChanId) || null
         }
 
         // 6. Create and send WebRTC Offer
@@ -569,6 +571,12 @@ export function useSFU() {
 
   // Complete cleanup
   function cleanup() {
+    // Teardown speaking detection to prevent dangling intervals and unclosed AudioContext instances
+    if (speakingDetectionCleanupRef.current) {
+      speakingDetectionCleanupRef.current()
+      speakingDetectionCleanupRef.current = null
+    }
+
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((t) => t.stop())
       localStreamRef.current = null

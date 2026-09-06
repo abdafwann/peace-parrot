@@ -47,7 +47,7 @@ func (s *Store) CreateUser(user *User) error {
 		// If first user, make admin
 		var count int
 		_ = s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
-		if count == 0 || user.Username == "afwan" || user.Username == "admin" {
+		if count == 0 {
 			user.Role = "Admin"
 		} else {
 			user.Role = "Member"

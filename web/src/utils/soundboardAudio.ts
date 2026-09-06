@@ -1,6 +1,6 @@
 // Web Audio API Soundboard Audio Engine & Synthesizer with Per-Sound Master Gain
 import { useSettingsStore } from '../stores/settingsStore'
-import { API_BASE_URL } from './config'
+import { getApiBaseUrl } from './config'
 
 export interface SoundboardItem {
   id: string
@@ -16,16 +16,15 @@ export interface SoundboardItem {
 export function resolveAudioUrl(url?: string): string | undefined {
   if (!url) return undefined
   if (url.startsWith('data:') || url.startsWith('blob:')) return url
-  // If it was saved with hardcoded http://localhost:8080, replace with current API_BASE_URL
+  const base = getApiBaseUrl()
   if (url.startsWith('http://localhost:8080')) {
     const relPath = url.substring('http://localhost:8080'.length)
-    return `${API_BASE_URL}${relPath}`
+    return `${base}${relPath}`
   }
   if (url.startsWith('http://') || url.startsWith('https://')) {
     return url
   }
-  // Relative URL like /uploads/...
-  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`
+  return `${base}${url.startsWith('/') ? '' : '/'}${url}`
 }
 
 export const DEFAULT_SOUNDBOARD: SoundboardItem[] = [

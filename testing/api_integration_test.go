@@ -64,7 +64,7 @@ func setupTestServer(t *testing.T) (*echo.Echo, *pkgdb.DB, *auth.JWTManager, fun
 	inviteHandler := invite.NewHandler(inviteStore)
 	userHandler := user.NewHandler(userStore, nil)
 	channelHandler := channel.NewHandler(channelStore)
-	messageHandler := message.NewHandler(messageStore)
+	messageHandler := message.NewHandler(messageStore, userStore)
 	reactionHandler := message.NewReactionHandler(messageStore)
 	pinHandler := message.NewPinHandler(messageStore)
 	moderationHandler := moderation.NewHandler(moderationStore)

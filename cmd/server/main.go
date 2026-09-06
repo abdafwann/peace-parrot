@@ -98,7 +98,7 @@ func main() {
 
 	// Soundboard handler
 	soundboardStore := soundboard.NewStore(db)
-	soundboardHandler := soundboard.NewHandler(soundboardStore, hub)
+	soundboardHandler := soundboard.NewHandler(soundboardStore, hub, userStore)
 
 	// Voice handler - needs broadcast function from hub
 	voiceHandler := voice.NewHandler(
@@ -120,13 +120,13 @@ func main() {
 	e.Use(middleware.PanicRecoveryMiddleware)
 	e.Use(echomiddleware.Recover())
 	e.Use(middleware.RequestLoggerMiddleware)
-	e.Use(middleware.CORSMiddleware())
+	e.Use(middleware.CORSMiddleware(cfg.Server.AllowedOrigins...))
 
 	// Health check endpoint
 	e.GET("/health", healthCheck(db))
 
 	// WebSocket endpoint
-	wsHandler := NewWebSocketHandler(hub, voiceHandler, messageHandler, jwtMgr)
+	wsHandler := NewWebSocketHandler(hub, voiceHandler, messageHandler, jwtMgr, cfg.Server.AllowedOrigins)
 	e.GET("/ws", wsHandler.HandleWebSocket)
 
 	// API routes

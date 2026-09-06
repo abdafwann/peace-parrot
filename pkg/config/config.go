@@ -20,9 +20,10 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings
 type ServerConfig struct {
-	Port         string
-	ReadTimeout  int // seconds
-	WriteTimeout int // seconds
+	Port           string
+	ReadTimeout    int // seconds
+	WriteTimeout   int // seconds
+	AllowedOrigins []string
 }
 
 // DatabaseConfig holds database connection settings
@@ -90,11 +91,35 @@ func Load() *Config {
 		}
 	}
 
+	corsEnv := getEnv("CORS_ALLOWED_ORIGINS", "")
+	var allowedOrigins []string
+	if corsEnv != "" {
+		for _, o := range strings.Split(corsEnv, ",") {
+			o = strings.TrimSpace(o)
+			if o != "" {
+				allowedOrigins = append(allowedOrigins, o)
+			}
+		}
+	}
+	if len(allowedOrigins) == 0 {
+		allowedOrigins = []string{
+			"http://localhost:1420",
+			"http://localhost:5173",
+			"http://localhost:8080",
+			"http://127.0.0.1:1420",
+			"http://127.0.0.1:5173",
+			"http://127.0.0.1:8080",
+			"tauri://localhost",
+			"https://tauri.localhost",
+		}
+	}
+
 	return &Config{
 		Server: ServerConfig{
-			Port:         getEnv("SERVER_PORT", "8080"),
-			ReadTimeout:  getEnvInt("SERVER_READ_TIMEOUT", 30),
-			WriteTimeout: getEnvInt("SERVER_WRITE_TIMEOUT", 30),
+			Port:           getEnv("SERVER_PORT", "8080"),
+			ReadTimeout:    getEnvInt("SERVER_READ_TIMEOUT", 30),
+			WriteTimeout:   getEnvInt("SERVER_WRITE_TIMEOUT", 30),
+			AllowedOrigins: allowedOrigins,
 		},
 		Database: DatabaseConfig{
 			Path:          getEnv("DB_PATH", "./peace-parrot.db"),

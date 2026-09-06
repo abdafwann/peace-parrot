@@ -4,20 +4,28 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/abdafwann/peace-parrot/internal/auth"
+	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/internal/websocket"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
 	"github.com/labstack/echo/v4"
 )
 
-type Handler struct {
-	store *Store
-	hub   *websocket.Hub
+type userStore interface {
+	GetUserByID(id string) (*user.User, error)
 }
 
-func NewHandler(store *Store, hub *websocket.Hub) *Handler {
+type Handler struct {
+	store     *Store
+	hub       *websocket.Hub
+	userStore userStore
+}
+
+func NewHandler(store *Store, hub *websocket.Hub, userStore userStore) *Handler {
 	return &Handler{
-		store: store,
-		hub:   hub,
+		store:     store,
+		hub:       hub,
+		userStore: userStore,
 	}
 }
 
@@ -73,12 +81,32 @@ func (h *Handler) Delete(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusBadRequest, "INVALID_REQUEST", "ID is required", nil)
 	}
 
-	err := h.store.Delete(id)
+	item, err := h.store.GetByID(id)
+	if err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to retrieve soundboard item", nil)
+	}
+	if item == nil {
+		return middleware.WriteError(c, http.StatusNotFound, "NOT_FOUND", "Soundboard item not found", nil)
+	}
+
+	currentUserID := auth.GetUserID(c)
+	isAdmin := false
+	if h.userStore != nil && currentUserID != "" {
+		if u, err := h.userStore.GetUserByID(currentUserID); err == nil && u != nil {
+			isAdmin = strings.EqualFold(u.Role, "Admin")
+		}
+	}
+
+	isCreator := item.CreatedBy != nil && *item.CreatedBy == currentUserID
+	if !isCreator && !isAdmin {
+		return middleware.WriteError(c, http.StatusForbidden, "FORBIDDEN", "You do not have permission to delete this soundboard item", nil)
+	}
+
+	err = h.store.Delete(id)
 	if err != nil {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to delete soundboard item", nil)
 	}
 
-	// Broadcast real-time soundboard item deletion to all users
 	if h.hub != nil {
 		h.hub.BroadcastAll("soundboard_item_delete", map[string]string{
 			"id": id,

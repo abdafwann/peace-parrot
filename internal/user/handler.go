@@ -2,16 +2,18 @@ package user
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/abdafwann/peace-parrot/pkg/cloudinary"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -56,11 +58,7 @@ func (h *Handler) List(c echo.Context) error {
 	for i, u := range users {
 		role := u.Role
 		if role == "" {
-			if i == 0 || strings.EqualFold(u.Username, "admin") || strings.EqualFold(u.Username, "afwan") || strings.EqualFold(u.Username, "gremiwo") {
-				role = "Admin"
-			} else {
-				role = "Member"
-			}
+			role = "Member"
 		}
 
 		response[i] = UserResponse{
@@ -104,11 +102,7 @@ func (h *Handler) GetMe(c echo.Context) error {
 
 	role := u.Role
 	if role == "" {
-		if strings.EqualFold(u.Username, "admin") || strings.EqualFold(u.Username, "afwan") || strings.EqualFold(u.Username, "gremiwo") {
-			role = "Admin"
-		} else {
-			role = "Member"
-		}
+		role = "Member"
 	}
 
 	return c.JSON(http.StatusOK, UserResponse{
@@ -215,12 +209,18 @@ func (h *Handler) UploadAvatar(c echo.Context) error {
 		avatarURL = res.SecureURL
 		avatarPublicID = res.PublicID
 	} else {
-		// Fallback for local testing without Cloudinary credentials: store as base64 data URI
-		mimeType := fileHeader.Header.Get("Content-Type")
-		if mimeType == "" {
-			mimeType = "image/png"
+		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+		if ext == "" || (!strings.HasPrefix(ext, ".jpg") && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif") {
+			ext = ".png"
 		}
-		avatarURL = fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(fileBytes))
+		dir := filepath.Join("uploads", "avatars")
+		_ = os.MkdirAll(dir, 0755)
+		filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+		dest := filepath.Join(dir, filename)
+		if err := os.WriteFile(dest, fileBytes, 0644); err != nil {
+			return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to save avatar", nil)
+		}
+		avatarURL = fmt.Sprintf("/uploads/avatars/%s", filename)
 		avatarPublicID = ""
 	}
 
@@ -307,12 +307,18 @@ func (h *Handler) UploadBanner(c echo.Context) error {
 		bannerURL = res.SecureURL
 		bannerPublicID = res.PublicID
 	} else {
-		// Fallback for local testing without Cloudinary: store as base64 data URI
-		mimeType := fileHeader.Header.Get("Content-Type")
-		if mimeType == "" {
-			mimeType = "image/png"
+		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
+		if ext == "" || (!strings.HasPrefix(ext, ".jpg") && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif") {
+			ext = ".png"
 		}
-		bannerURL = fmt.Sprintf("data:%s;base64,%s", mimeType, base64.StdEncoding.EncodeToString(fileBytes))
+		dir := filepath.Join("uploads", "banners")
+		_ = os.MkdirAll(dir, 0755)
+		filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
+		dest := filepath.Join(dir, filename)
+		if err := os.WriteFile(dest, fileBytes, 0644); err != nil {
+			return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to save banner", nil)
+		}
+		bannerURL = fmt.Sprintf("/uploads/banners/%s", filename)
 		bannerPublicID = ""
 	}
 
