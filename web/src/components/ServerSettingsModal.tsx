@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { PrivateImage } from './PrivateImage'
 import {
   X,
   Settings,
@@ -14,6 +15,7 @@ import {
   Plus,
   UserX,
   MicOff,
+  Mic,
   Volume2,
   GripVertical,
   ArrowUp,
@@ -60,6 +62,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   const banUser = useServerStore((state) => state.banUser)
   const kickUser = useServerStore((state) => state.kickUser)
   const muteUser = useServerStore((state) => state.muteUser)
+  const unmuteUser = useServerStore((state) => state.unmuteUser)
   const updateMemberRole = useServerStore((state) => state.updateMemberRole)
   const roles = useServerStore((state) => state.roles)
   const fetchRoles = useServerStore((state) => state.fetchRoles)
@@ -365,15 +368,18 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
   }
 
   const handleMute = async (userId: string, username: string) => {
-    const minutes = prompt(`Enter mute duration in minutes for ${username} (or 0 for permanent):`, '60')
-    if (minutes === null) return
-    const duration = parseInt(minutes, 10)
-    const ok = await muteUser(userId, isNaN(duration) ? 60 : duration)
+    const ok = await muteUser(userId)
     if (ok) {
       toast.success(`Muted ${username}`)
     } else {
       toast.error(`Failed to mute ${username}`)
     }
+  }
+
+  const handleUnmute = async (userId: string, username: string) => {
+    const ok = await unmuteUser(userId)
+    if (ok) toast.success(`Unmuted ${username}`)
+    else toast.error(`Failed to unmute ${username}`)
   }
 
   const filteredMembers = membersList.filter((m) => {
@@ -621,7 +627,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                         onClick={() => fileInputRef.current?.click()}
                       >
                         {iconPreview ? (
-                          <img src={iconPreview} alt="Server Icon" className="w-full h-full object-cover" />
+                          <PrivateImage src={iconPreview} alt="Server Icon" className="w-full h-full object-cover" />
                         ) : (
                           serverName.substring(0, 2).toUpperCase() || 'PP'
                         )}
@@ -988,7 +994,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                               (editRoleIcon.startsWith('http') ||
                                 editRoleIcon.startsWith('data:') ||
                                 editRoleIcon.startsWith('/')) ? (
-                                <img src={editRoleIcon} alt="Role Icon" className="w-full h-full object-cover" />
+                                <PrivateImage src={editRoleIcon} alt="Role Icon" className="w-full h-full object-cover" />
                               ) : editRoleIcon ? (
                                 <span>{editRoleIcon}</span>
                               ) : (
@@ -1054,7 +1060,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                               { id: 4, label: 'Manage Channels', desc: 'Create, reorder, edit topics, and delete channels' },
                               { id: 8, label: 'Kick Members', desc: 'Remove disruptive users from the community' },
                               { id: 16, label: 'Ban Members', desc: 'Permanently blacklist malicious users' },
-                              { id: 32, label: 'Mute Members', desc: 'Temporarily silence members in voice and text' },
+                              { id: 32, label: 'Mute Members', desc: 'Mute members in voice until an administrator unmutes them' },
                               { id: 64, label: 'Send Messages', desc: 'Post text messages and attachments in channels' },
                               { id: 128, label: 'Connect Voice', desc: 'Join voice channels and transmit microphone audio' },
                             ].map((perm) => {
@@ -1138,7 +1144,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                           <div className="flex items-center gap-3.5 min-w-0">
                             <div className="w-10 h-10 rounded-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-black text-sm overflow-hidden shrink-0 shadow-sm">
                               {m.avatarUrl ? (
-                                <img src={m.avatarUrl} alt={m.username} className="w-full h-full object-cover" />
+                                <PrivateImage src={m.avatarUrl} alt={m.username} className="w-full h-full object-cover" />
                               ) : (
                                 m.username.substring(0, 2).toUpperCase()
                               )}
@@ -1179,6 +1185,13 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                                   title="Mute Member"
                                 >
                                   <MicOff size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleUnmute(m.id, m.username)}
+                                  className="p-2 rounded-xl text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 transition-colors cursor-pointer"
+                                  title="Unmute Member"
+                                >
+                                  <Mic size={15} />
                                 </button>
                                 <button
                                   onClick={() => handleKick(m.id, m.username)}
@@ -1343,7 +1356,7 @@ export function ServerSettingsModal({ isOpen, onClose }: ServerSettingsModalProp
                           <div className="flex items-center gap-3.5">
                             <div className="w-10 h-10 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center font-bold text-sm overflow-hidden shrink-0">
                               {ban.avatarUrl ? (
-                                <img src={ban.avatarUrl} alt={ban.username} className="w-full h-full object-cover" />
+                                <PrivateImage src={ban.avatarUrl} alt={ban.username} className="w-full h-full object-cover" />
                               ) : (
                                 ban.username.substring(0, 2).toUpperCase()
                               )}

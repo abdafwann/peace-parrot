@@ -6,13 +6,15 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/internal/message"
 	"github.com/abdafwann/peace-parrot/internal/voice"
 	"github.com/abdafwann/peace-parrot/internal/websocket"
-	gws "github.com/gorilla/websocket"
 	"github.com/google/uuid"
+	gws "github.com/gorilla/websocket"
 	"github.com/labstack/echo/v4"
 )
 
@@ -22,11 +24,21 @@ type WebSocketHandler struct {
 	voiceHandler   *voice.Handler
 	messageHandler *message.Handler
 	jwtMgr         *auth.JWTManager
+	bans           auth.BanChecker
 	upgrader       gws.Upgrader
+	voiceMu        sync.Mutex
+	voiceOwners    map[string]string
+	signalOwners   sync.Map // user ID -> owning connection ID
+}
+
+func (h *WebSocketHandler) sendVoiceSignal(userID, eventType string, payload interface{}) {
+	if owner, ok := h.signalOwners.Load(userID); ok {
+		h.hub.SendToClient(owner.(string), eventType, payload)
+	}
 }
 
 // NewWebSocketHandler creates a new WebSocket handler
-func NewWebSocketHandler(hub *websocket.Hub, voiceHandler *voice.Handler, messageHandler *message.Handler, jwtMgr *auth.JWTManager, allowedOrigins []string) *WebSocketHandler {
+func NewWebSocketHandler(hub *websocket.Hub, voiceHandler *voice.Handler, messageHandler *message.Handler, jwtMgr *auth.JWTManager, allowedOrigins []string, bans auth.BanChecker) *WebSocketHandler {
 	allowAll := false
 	for _, o := range allowedOrigins {
 		if o == "*" {
@@ -60,6 +72,8 @@ func NewWebSocketHandler(hub *websocket.Hub, voiceHandler *voice.Handler, messag
 		voiceHandler:   voiceHandler,
 		messageHandler: messageHandler,
 		jwtMgr:         jwtMgr,
+		bans:           bans,
+		voiceOwners:    make(map[string]string),
 		upgrader:       u,
 	}
 }
@@ -104,6 +118,19 @@ func (h *WebSocketHandler) HandleWebSocket(c echo.Context) error {
 	if userID == "" {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token: no user ID"})
 	}
+	if claims.ExpiresAt == nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "token expiry required"})
+	}
+	if h.bans == nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "unable to check account status"})
+	}
+	banned, err := h.bans.IsUserBanned(userID)
+	if err != nil {
+		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "unable to check account status"})
+	}
+	if banned {
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "account is banned"})
+	}
 
 	var responseHeader http.Header
 	if subprotocol != "" {
@@ -128,24 +155,30 @@ func (h *WebSocketHandler) HandleWebSocket(c echo.Context) error {
 
 	// Register client with hub
 	h.hub.Register(client)
+	// A ban may have been recorded between the initial check and registration.
+	banned, err = h.bans.IsUserBanned(userID)
+	if err != nil || banned {
+		_ = conn.Close()
+		h.hub.Unregister(client)
+		return nil
+	}
+	h.hub.Activate(client)
 	log.Printf("WebSocket: User %s (%s) connected", userID, claims.Username)
 
 	// Send initial active voice room states to newly connected client
-	for _, session := range h.voiceHandler.GetManager().GetAllSessions() {
-		participants := h.voiceHandler.GetManager().GetParticipants(session.ChannelID)
-		if len(participants) > 0 {
-			_ = client.SendJSON(websocket.Message{
-				Type: "voice_room_state",
-				Payload: websocket.MustMarshal(voice.VoiceRoomStatePayload{
-					ChannelID:    session.ChannelID,
-					Participants: participants,
-				}),
-			})
-		}
-	}
+	h.voiceHandler.SendSnapshots(func(state voice.VoiceRoomStatePayload) {
+		h.hub.QueueToClient(client.ID, "voice_room_state", state)
+	})
 
 	// Start goroutine to read messages
-	go h.readPump(client)
+	go func() {
+		timer := time.AfterFunc(time.Until(claims.ExpiresAt.Time), func() {
+			_ = conn.WriteControl(gws.CloseMessage, gws.FormatCloseMessage(gws.ClosePolicyViolation, "session expired"), time.Now().Add(time.Second))
+			_ = conn.Close()
+		})
+		defer timer.Stop()
+		h.readPump(client)
+	}()
 
 	return nil
 }
@@ -155,7 +188,13 @@ func (h *WebSocketHandler) readPump(client *websocket.Client) {
 	defer func() {
 		// Cleanup on disconnect
 		h.hub.Unregister(client)
-		h.voiceHandler.RemoveUser(client.UserID)
+		h.voiceMu.Lock()
+		if h.voiceOwners[client.UserID] == client.ID {
+			delete(h.voiceOwners, client.UserID)
+			h.signalOwners.Delete(client.UserID)
+			h.voiceHandler.RemoveUser(client.UserID)
+		}
+		h.voiceMu.Unlock()
 		client.Conn.Close()
 		log.Printf("WebSocket: User %s disconnected", client.UserID)
 	}()
@@ -184,6 +223,14 @@ func (h *WebSocketHandler) readPump(client *websocket.Client) {
 // handleMessage routes messages to appropriate handlers
 func (h *WebSocketHandler) handleMessage(client *websocket.Client, msg *websocket.Message) {
 	log.Printf("[WS] Route message type=%s from user=%s", msg.Type, client.UserID)
+	switch msg.Type {
+	case "voice_join", "voice_leave", "voice_state_update", "speaking", "webrtc_offer", "webrtc_answer", "webrtc_ice":
+		h.voiceMu.Lock()
+		defer h.voiceMu.Unlock()
+		if msg.Type != "voice_join" && h.voiceOwners[client.UserID] != client.ID {
+			return
+		}
+	}
 
 	switch msg.Type {
 	case "channel_join":
@@ -245,18 +292,37 @@ func (h *WebSocketHandler) handleMessage(client *websocket.Client, msg *websocke
 		}
 
 	case "voice_join":
-		result, err := h.voiceHandler.HandleVoiceJoin(client.UserID, client.Username, msg.Payload)
+		var requested voice.VoiceJoinPayload
+		if err := json.Unmarshal(msg.Payload, &requested); err != nil || requested.ChannelID == "" {
+			return
+		}
+		if err := h.voiceHandler.ValidateVoiceJoin(client.UserID, requested); err != nil {
+			log.Printf("Voice join error: %v", err)
+			return
+		}
+		if owner := h.voiceOwners[client.UserID]; owner != "" {
+			channels := h.voiceHandler.GetUserChannels(client.UserID)
+			if owner != client.ID || (len(channels) > 0 && channels[0] != requested.ChannelID) {
+				h.signalOwners.Delete(client.UserID)
+				h.voiceHandler.RemoveUser(client.UserID)
+				delete(h.voiceOwners, client.UserID)
+			}
+		}
+		_, err := h.voiceHandler.HandleVoiceJoin(client.UserID, client.Username, msg.Payload)
 		if err != nil {
 			log.Printf("Voice join error: %v", err)
 			return
 		}
-		// Send room state back to user
-		h.hub.SendToUser(client.UserID, "voice_room_state", result)
+		h.voiceOwners[client.UserID] = client.ID
+		h.signalOwners.Store(client.UserID, client.ID)
 
 	case "voice_leave":
 		err := h.voiceHandler.HandleVoiceLeave(client.UserID, msg.Payload)
 		if err != nil {
 			log.Printf("Voice leave error: %v", err)
+		} else {
+			delete(h.voiceOwners, client.UserID)
+			h.signalOwners.Delete(client.UserID)
 		}
 
 	case "voice_state_update":
@@ -278,7 +344,7 @@ func (h *WebSocketHandler) handleMessage(client *websocket.Client, msg *websocke
 			return
 		}
 		// Send WebRTC answer back to user
-		h.hub.SendToUser(client.UserID, "webrtc_answer", result)
+		h.sendVoiceSignal(client.UserID, "webrtc_answer", result)
 
 	case "webrtc_answer":
 		err := h.voiceHandler.HandleWebRTCAnswer(client.UserID, msg.Payload)
@@ -421,7 +487,7 @@ func (h *WebSocketHandler) handleMessageCreate(client *websocket.Client, payload
 		return nil, fmt.Errorf("content or attachment is required")
 	}
 
-	log.Printf("[WS] Creating message: user=%s channel=%s content=%s attachments=%d", client.UserID, msgPayload.ChannelID, msgPayload.Content, len(msgPayload.Attachments))
+	log.Printf("[WS] Creating message: user=%s channel=%s attachments=%d", client.UserID, msgPayload.ChannelID, len(msgPayload.Attachments))
 
 	// Create message via message handler
 	msg, err := h.messageHandler.CreateMessageWithAttachments(msgPayload.ChannelID, client.UserID, msgPayload.Content, msgPayload.Attachments)
@@ -473,6 +539,9 @@ func (h *WebSocketHandler) handleMessageEdit(userID string, payload json.RawMess
 		}
 		return nil, err
 	}
+	if msg == nil {
+		return nil, nil
+	}
 
 	channelID := msg.ChannelID
 	if channelID == "" {
@@ -503,6 +572,9 @@ func (h *WebSocketHandler) handleMessageDelete(userID string, payload json.RawMe
 			return nil, nil // Silently ignore
 		}
 		return nil, err
+	}
+	if msg == nil {
+		return nil, nil
 	}
 
 	channelID := msg.ChannelID
@@ -536,7 +608,7 @@ func (h *WebSocketHandler) handleReactionAdd(userID string, payload json.RawMess
 	return &ReactionResponse{
 		ChannelID: reactPayload.ChannelID,
 		MessageID: reactPayload.MessageID,
-		Emoji:    reactPayload.Emoji,
+		Emoji:     reactPayload.Emoji,
 		User: &UserInfo{
 			ID:       userID,
 			Username: username,
@@ -558,8 +630,8 @@ func (h *WebSocketHandler) handleReactionRemove(userID string, payload json.RawM
 	return &ReactionResponse{
 		ChannelID: reactPayload.ChannelID,
 		MessageID: reactPayload.MessageID,
-		Emoji:    reactPayload.Emoji,
-		UserID:   userID,
+		Emoji:     reactPayload.Emoji,
+		UserID:    userID,
 	}, nil
 }
 

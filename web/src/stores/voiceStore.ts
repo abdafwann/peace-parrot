@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { useAuthStore } from './authStore'
+import { saveVoicePreference } from '../utils/voicePreference'
 
 // ============================================================================
 // Types - matches spec-voice.md Section 3.1 & Discord Standard Audio Controls
@@ -6,7 +8,8 @@ import { create } from 'zustand'
 
 export interface VoiceParticipantState {
   // Server-synced (broadcasted via WebSocket)
-  muted: boolean           // Self-muted OR admin-muted
+  muted: boolean           // Self-muted
+  adminMuted: boolean      // Muted by an administrator
   deafened: boolean        // Self-deafened
   isScreenSharing: boolean // User is sharing their screen
   joinedAt: number         // Timestamp
@@ -159,6 +162,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
   setSelfMuted: (muted) => {
     set({ selfMuted: muted })
+    const userId = useAuthStore.getState().user?.id
+    if (userId && typeof window !== 'undefined') {
+      try { saveVoicePreference(window.localStorage, userId, { muted, deafened: get().selfDeafened }) } catch {}
+    }
     // Update local participant state
     const { channelId, participants } = get()
     if (channelId) {
@@ -179,6 +186,10 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
       selfDeafened: deafened,
       selfMuted: deafened ? true : state.selfMuted,
     }))
+    const userId = useAuthStore.getState().user?.id
+    if (userId && typeof window !== 'undefined') {
+      try { saveVoicePreference(window.localStorage, userId, { muted: get().selfMuted, deafened }) } catch {}
+    }
     // Update local participant state
     const { channelId, participants } = get()
     if (channelId) {
@@ -208,6 +219,7 @@ export const useVoiceStore = create<VoiceStore>((set, get) => ({
 
       newParticipants.set(userId, {
         muted: false,
+        adminMuted: false,
         deafened: false,
         isScreenSharing: false,
         joinedAt: Date.now(),

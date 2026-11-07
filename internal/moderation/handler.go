@@ -1,7 +1,6 @@
 package moderation
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/abdafwann/peace-parrot/internal/auth"
@@ -11,12 +10,16 @@ import (
 
 // Handler handles moderation endpoints
 type Handler struct {
-	store *Store
+	store      *Store
+	disconnect func(string)
+	voiceMute  func(string, bool)
 }
 
+func (h *Handler) SetVoiceMuteNotifier(notify func(string, bool)) { h.voiceMute = notify }
+
 // NewHandler creates a new moderation handler
-func NewHandler(store *Store) *Handler {
-	return &Handler{store: store}
+func NewHandler(store *Store, disconnect func(string)) *Handler {
+	return &Handler{store: store, disconnect: disconnect}
 }
 
 // MuteRequest represents mute request body
@@ -61,6 +64,9 @@ func (h *Handler) Ban(c echo.Context) error {
 		}
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to ban user", nil)
 	}
+	if h.disconnect != nil {
+		h.disconnect(userID)
+	}
 
 	return c.JSON(http.StatusOK, MuteResponse{Message: "User banned"})
 }
@@ -84,24 +90,17 @@ func (h *Handler) Mute(c echo.Context) error {
 		moderatorID = "admin"
 	}
 
-	var req MuteRequest
-	if err := c.Bind(&req); err != nil {
-		req.DurationMinutes = 0 // Default to permanent
-	}
-
-	if err := h.store.MuteUser(userID, moderatorID, req.DurationMinutes); err != nil {
+	if err := h.store.MuteUser(userID, moderatorID, 0); err != nil {
 		if err == ErrUserNotFound {
 			return middleware.WriteError(c, http.StatusNotFound, "USER_NOT_FOUND", "User not found", nil)
 		}
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to mute user", nil)
 	}
-
-	msg := "User muted"
-	if req.DurationMinutes > 0 {
-		msg = fmt.Sprintf("User muted for %d minutes", req.DurationMinutes)
+	if h.voiceMute != nil {
+		h.voiceMute(userID, true)
 	}
 
-	return c.JSON(http.StatusOK, MuteResponse{Message: msg})
+	return c.JSON(http.StatusOK, MuteResponse{Message: "User muted"})
 }
 
 // Unmute handles DELETE /api/moderation/mute/:userId
@@ -110,6 +109,9 @@ func (h *Handler) Unmute(c echo.Context) error {
 
 	if err := h.store.UnmuteUser(userID); err != nil {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to unmute user", nil)
+	}
+	if h.voiceMute != nil {
+		h.voiceMute(userID, false)
 	}
 
 	return c.JSON(http.StatusOK, MuteResponse{Message: "User unmuted"})

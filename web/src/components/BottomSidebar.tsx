@@ -22,6 +22,7 @@ import { useWebSocketStore } from '../stores/websocketStore'
 import { useVoiceCleanup } from '../hooks/useVoice'
 import { UserSettingsModal } from './UserSettingsModal'
 import { SoundboardModal } from './SoundboardModal'
+import { PrivateImage } from './PrivateImage'
 import { playSoundEffect } from '../utils/soundEffects'
 import { getOptimizedImageUrl } from '../utils/config'
 import { playSoundboardEffect } from '../utils/soundboardAudio'
@@ -124,7 +125,7 @@ export function BottomSidebar() {
         channelId: voiceChannelId,
         payload: {
           channelId: voiceChannelId,
-          selfMuted,
+          selfMuted: useVoiceStore.getState().selfMuted,
           selfDeafened: nextDeafened,
         },
       })
@@ -224,9 +225,9 @@ export function BottomSidebar() {
               }}
             >
               {user?.avatarUrl ? (
-                <img
+                <PrivateImage
                   src={getOptimizedImageUrl(user.avatarUrl, 64, 64)}
-                  alt="Avatar"
+                  alt={user?.displayName || user?.username || 'User'}
                   loading="lazy"
                   decoding="async"
                   className="w-full h-full object-cover"

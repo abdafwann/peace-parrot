@@ -10,7 +10,12 @@ import { useChannelStore } from './stores/channelStore'
 import { useThemeStore } from './stores/themeStore'
 import { useWebSocketStore, setTokenGetter } from './stores/websocketStore'
 import { useSFU } from './hooks/useSFU'
+import { useVoiceStore } from './stores/voiceStore'
+import { useServerStore } from './stores/serverStore'
+import { useBlockStore } from './stores/blockStore'
+import { loadVoicePreference } from './utils/voicePreference'
 import { apiFetch, getApiBaseUrl, APP_VERSION } from './utils/config'
+import { isCurrentSession } from './utils/sessionGuard'
 import { useState, useEffect } from 'react'
 import { Sun, Moon, Bird, Server, Settings2 } from 'lucide-react'
 
@@ -174,7 +179,7 @@ function AuthPage({ mode, onSwitch }: { mode: AuthMode; onSwitch: () => void }) 
             <span>•</span>
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              End-to-end encrypted voice & real-time chat
+              Voice & real-time chat
             </span>
           </div>
         </div>
@@ -205,6 +210,21 @@ function ChatPage() {
   const token = useAuthStore((state) => state.token)
   const connect = useWebSocketStore((state) => state.connect)
   const isConnected = useWebSocketStore((state) => state.isConnected)
+  const subscribe = useWebSocketStore((state) => state.subscribe)
+
+  useEffect(() => {
+    useBlockStore.getState().reset(token)
+    if (token) void useBlockStore.getState().fetchBlocks()
+    return () => useBlockStore.getState().reset(null)
+  }, [token])
+
+  useEffect(() => {
+    if (token && isConnected) void useBlockStore.getState().fetchBlocks()
+  }, [token, isConnected])
+
+  useEffect(() => subscribe((message) => {
+    if (message.type === 'user_blocks_updated') void useBlockStore.getState().fetchBlocks()
+  }), [subscribe])
 
   // Set up token getter for WebSocket store
   useEffect(() => {
@@ -226,6 +246,7 @@ function ChatPage() {
         headers: { Authorization: `Bearer ${token}` },
       })
         .then((res) => {
+          if (!isCurrentSession(token, useAuthStore.getState().token)) return null
           if (res.status === 401) {
             console.warn('[App] Session expired or invalid (401). Logging out.')
             useAuthStore.getState().logout()
@@ -234,7 +255,7 @@ function ChatPage() {
           return res.ok ? res.json() : null
         })
         .then((data) => {
-          if (data) {
+          if (data && isCurrentSession(token, useAuthStore.getState().token)) {
             useAuthStore.getState().setUser(data)
           }
         })
@@ -244,9 +265,16 @@ function ChatPage() {
 
   // Fetch channels on mount
   useEffect(() => {
+    const requestToken = useAuthStore.getState().token
+    if (!requestToken) return
+
     apiFetch('/api/channels')
-      .then((res) => res.json())
+      .then((res) => {
+        if (!isCurrentSession(requestToken, useAuthStore.getState().token)) return null
+        return res.ok ? res.json() : null
+      })
       .then((data) => {
+        if (!isCurrentSession(requestToken, useAuthStore.getState().token)) return
         if (Array.isArray(data) && data.length > 0) {
           setChannels(data)
           // Auto-select first text channel if none selected
@@ -268,6 +296,7 @@ function ChatPage() {
         }
       })
       .catch(() => {
+        if (!isCurrentSession(requestToken, useAuthStore.getState().token)) return
         // Fallback on error
         setChannels([
           { id: '1', name: 'general', type: 'text', position: 0 },
@@ -279,7 +308,7 @@ function ChatPage() {
           useChannelStore.getState().setActiveChannel('1')
         }
       })
-  }, [setChannels])
+  }, [setChannels, token])
 
   // Sync theme
   useEffect(() => {
@@ -349,7 +378,22 @@ import { UpdateModal } from './components/UpdateModal'
 
 export default function App() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated)
+  const userId = useAuthStore((state) => state.user?.id)
   const [authMode, setAuthMode] = useState<AuthMode>('login')
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      useWebSocketStore.getState().disconnect()
+      useVoiceStore.getState().reset()
+      useChannelStore.setState({ channels: [], activeChannelId: null })
+      useServerStore.setState({ settings: null, roles: [], bans: [], isLoading: false, error: null })
+    } else if (userId) {
+      try {
+        const preference = loadVoicePreference(window.localStorage, userId)
+        useVoiceStore.setState({ selfMuted: preference.muted, selfDeafened: preference.deafened })
+      } catch {}
+    }
+  }, [isAuthenticated, userId])
 
   return (
     <>

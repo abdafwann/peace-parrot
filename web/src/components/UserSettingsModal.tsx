@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { PrivateImage } from './PrivateImage'
 import {
   X,
   User as UserIcon,
@@ -15,7 +16,6 @@ import {
   Volume2,
   Upload,
   Image as ImageIcon,
-  Loader2,
   Radio,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
@@ -26,6 +26,8 @@ import {
   requestDesktopNotificationPermission,
 } from '../utils/soundEffects'
 import { apiFetch, APP_VERSION } from '../utils/config'
+import { saveProfileDraft } from '../utils/profileDraft'
+import { selectedProfileGradient } from '../utils/profileAppearance'
 
 interface UserSettingsModalProps {
   isOpen: boolean
@@ -52,9 +54,19 @@ const BANNER_GRADIENT_PRESETS = [
   { id: 'deep-abyss', name: 'Deep Abyss', bg: 'linear-gradient(135deg, #030712, #075985, #0284c7)' },
 ]
 
+function useLocalPreview(file: File | null): string | undefined {
+  const [url, setUrl] = useState<string>()
+  useEffect(() => {
+    if (!file) { setUrl(undefined); return }
+    const objectUrl = URL.createObjectURL(file)
+    setUrl(objectUrl)
+    return () => URL.revokeObjectURL(objectUrl)
+  }, [file])
+  return url
+}
+
 export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   const user = useAuthStore((state) => state.user)
-  const token = useAuthStore((state) => state.token)
   const setUser = useAuthStore((state) => state.setUser)
   const logout = useAuthStore((state) => state.logout)
   const { theme, toggleTheme } = useThemeStore()
@@ -70,16 +82,17 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   const [bio, setBio] = useState(user?.bio || '')
   const [avatarUrl, setAvatarUrl] = useState(user?.avatarUrl || '')
   const [bannerUrl, setBannerUrl] = useState(user?.bannerUrl || '')
-  const [selectedGradient, setSelectedGradient] = useState<string>(AVATAR_GRADIENT_PRESETS[0].bg)
-  const [selectedBannerGradient, setSelectedBannerGradient] = useState<string>(BANNER_GRADIENT_PRESETS[0].bg)
   const [isSaving, setIsSaving] = useState(false)
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false)
-  const [isUploadingBanner, setIsUploadingBanner] = useState(false)
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [bannerFile, setBannerFile] = useState<File | null>(null)
+  const avatarPreview = useLocalPreview(avatarFile)
+  const bannerPreview = useLocalPreview(bannerFile)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [error, setError] = useState('')
 
   const avatarFileInputRef = useRef<HTMLInputElement>(null)
   const bannerFileInputRef = useRef<HTMLInputElement>(null)
+  const saveController = useRef<AbortController | null>(null)
 
   // Media Devices
   const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceInfo[]>([])
@@ -100,15 +113,20 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   const micStreamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number | null>(null)
 
-  // Sync user state
+  // Opening starts a fresh draft; closing discards any pending files.
   useEffect(() => {
-    if (user) {
-      setDisplayName(user.displayName || user.username || '')
-      setBio(user.bio || '')
-      setAvatarUrl(user.avatarUrl || '')
-      setBannerUrl(user.bannerUrl || '')
-    }
-  }, [user])
+    setAvatarFile(null)
+    setBannerFile(null)
+    const current = useAuthStore.getState().user
+    setDisplayName(current?.displayName || current?.username || '')
+    setBio(current?.bio || '')
+    setAvatarUrl(current?.avatarUrl || '')
+    setBannerUrl(current?.bannerUrl || '')
+    setError('')
+    setSaveSuccess(false)
+    if (!isOpen) return
+    return () => { saveController.current?.abort() }
+  }, [isOpen])
 
   // Fetch media devices
   useEffect(() => {
@@ -225,8 +243,9 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
 
   if (!isOpen) return null
 
-  const handleUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadAvatar = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
 
     if (file.size > 10 * 1024 * 1024) {
@@ -234,40 +253,13 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       return
     }
 
-    setIsUploadingAvatar(true)
     setError('')
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const res = await apiFetch('/api/users/me/avatar', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error?.message || 'Failed to upload avatar')
-        return
-      }
-
-      setAvatarUrl(data.avatarUrl)
-      setUser(data)
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
-    } catch {
-      setError('Network error uploading avatar')
-    } finally {
-      setIsUploadingAvatar(false)
-      if (avatarFileInputRef.current) avatarFileInputRef.current.value = ''
-    }
+    setAvatarFile(file)
   }
 
-  const handleUploadBanner = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUploadBanner = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
+    e.target.value = ''
     if (!file) return
 
     if (file.size > 10 * 1024 * 1024) {
@@ -275,73 +267,38 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
       return
     }
 
-    setIsUploadingBanner(true)
     setError('')
-    try {
-      const formData = new FormData()
-      formData.append('file', file)
-
-      const res = await apiFetch('/api/users/me/banner', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
-      })
-
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error?.message || 'Failed to upload banner')
-        return
-      }
-
-      setBannerUrl(data.bannerUrl)
-      setUser(data)
-      setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 3000)
-    } catch {
-      setError('Network error uploading banner')
-    } finally {
-      setIsUploadingBanner(false)
-      if (bannerFileInputRef.current) bannerFileInputRef.current.value = ''
-    }
+    setBannerFile(file)
   }
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (saveController.current) return
     setIsSaving(true)
     setError('')
     setSaveSuccess(false)
+    const controller = new AbortController()
+    saveController.current = controller
 
     try {
-      const res = await apiFetch('/api/users/me', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          displayName: displayName.trim(),
-          bio: bio.trim(),
-          avatarUrl: avatarUrl.trim(),
-          bannerUrl: bannerUrl.trim(),
-        }),
-      })
-
-      const data = await res.json()
-
-      if (!res.ok) {
-        setError(data.error?.message || 'Failed to save profile')
-        return
-      }
-
+      const data = await saveProfileDraft({ displayName, bio, avatarUrl, bannerUrl, avatarFile, bannerFile }, apiFetch, controller.signal)
+      if (controller.signal.aborted) return
       setUser(data)
+      setDisplayName(data.displayName || data.DisplayName || data.username || data.Username || '')
+      setBio(data.bio || data.Bio || '')
+      setAvatarUrl(data.avatarUrl || data.AvatarURL || '')
+      setBannerUrl(data.bannerUrl || data.BannerURL || '')
+      setAvatarFile(null)
+      setBannerFile(null)
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
-    } catch {
-      setError('Network error saving profile')
+    } catch (err) {
+      if (!controller.signal.aborted) setError(err instanceof Error ? err.message : 'Failed to save profile')
     } finally {
-      setIsSaving(false)
+      if (saveController.current === controller) {
+        saveController.current = null
+        setIsSaving(false)
+      }
     }
   }
 
@@ -360,6 +317,10 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
   }
 
   const initials = (displayName || user?.username || 'U')[0].toUpperCase()
+  const displayAvatar = avatarFile ? avatarPreview : avatarUrl
+  const displayBanner = bannerFile ? bannerPreview : bannerUrl
+  const selectedGradient = selectedProfileGradient(avatarUrl, !!avatarFile, AVATAR_GRADIENT_PRESETS[0].bg)
+  const selectedBannerGradient = selectedProfileGradient(bannerUrl, !!bannerFile, BANNER_GRADIENT_PRESETS[0].bg)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6 bg-black/80 backdrop-blur-2xl animate-fade-in">
@@ -376,11 +337,11 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
               <div
                 className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-white text-sm shrink-0 shadow-md ring-1 ring-white/10 overflow-hidden"
                 style={{
-                  background: avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:')) ? 'transparent' : selectedGradient,
+                  background: displayAvatar ? 'transparent' : selectedGradient,
                 }}
               >
-                {avatarUrl ? (
-                  <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                {displayAvatar ? (
+                  <PrivateImage src={displayAvatar} alt={displayName || user?.username || 'User'} className="w-full h-full object-cover" />
                 ) : (
                   initials
                 )}
@@ -518,19 +479,19 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
             {/* TAB 1: Profile */}
             {/* ========================================================================= */}
             {activeTab === 'profile' && (
-              <div className="max-w-2xl space-y-7">
+              <fieldset disabled={isSaving} className="max-w-2xl space-y-7">
                 {/* Live Profile Card Preview */}
                 <div className="rounded-3xl p-5 relative overflow-hidden bg-[#090d14] border border-white/10 shadow-2xl">
                   {/* Header Banner */}
                   <div
                     className="h-32 -m-5 mb-0 rounded-t-3xl relative overflow-hidden transition-all duration-300 flex items-center justify-center"
                     style={{
-                      background: bannerUrl && (bannerUrl.startsWith('http') || bannerUrl.startsWith('data:')) ? 'transparent' : (bannerUrl || selectedBannerGradient),
+                      background: displayBanner && (displayBanner.startsWith('http') || displayBanner.startsWith('data:') || displayBanner.startsWith('blob:') || displayBanner.startsWith('/uploads/')) ? 'transparent' : (displayBanner || selectedBannerGradient),
                     }}
                   >
-                    {bannerUrl && (bannerUrl.startsWith('http') || bannerUrl.startsWith('data:')) ? (
-                      <img
-                        src={bannerUrl}
+                    {displayBanner && (displayBanner.startsWith('http') || displayBanner.startsWith('data:') || displayBanner.startsWith('blob:') || displayBanner.startsWith('/uploads/')) ? (
+                      <PrivateImage
+                        src={displayBanner}
                         alt="Profile Banner"
                         className="w-full h-full object-cover"
                       />
@@ -543,11 +504,11 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                     <div
                       className="w-24 h-24 rounded-2xl ring-4 ring-[#090d14] flex items-center justify-center text-2xl font-bold text-white shadow-2xl overflow-hidden transition-all duration-300 relative group"
                       style={{
-                        background: avatarUrl && (avatarUrl.startsWith('http') || avatarUrl.startsWith('data:')) ? 'transparent' : selectedGradient,
+                        background: displayAvatar ? 'transparent' : selectedGradient,
                       }}
                     >
-                      {avatarUrl ? (
-                        <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
+                      {displayAvatar ? (
+                        <PrivateImage src={displayAvatar} alt={displayName || user?.username || 'User'} className="w-full h-full object-cover" />
                       ) : (
                         initials
                       )}
@@ -596,19 +557,19 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       <button
                         type="button"
                         onClick={() => bannerFileInputRef.current?.click()}
-                        disabled={isUploadingBanner}
+                        disabled={isSaving}
                         className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
                       >
-                        {isUploadingBanner ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                        <span>{isUploadingBanner ? 'Uploading...' : 'Upload Banner'}</span>
+                        <Upload size={13} />
+                        <span>Choose Banner</span>
                       </button>
 
-                      {bannerUrl && (
+                      {(bannerUrl || bannerFile) && (
                         <button
                           type="button"
                           onClick={() => {
                             setBannerUrl('')
-                            setSelectedBannerGradient(BANNER_GRADIENT_PRESETS[0].bg)
+                            setBannerFile(null)
                           }}
                           className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                         >
@@ -630,17 +591,17 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                           type="button"
                           onClick={() => {
                             setBannerUrl(preset.bg)
-                            setSelectedBannerGradient(preset.bg)
+                            setBannerFile(null)
                           }}
                           title={preset.name}
                           className={`h-9 rounded-xl transition-all relative overflow-hidden border ${
-                            bannerUrl === preset.bg || selectedBannerGradient === preset.bg
+                            selectedBannerGradient === preset.bg
                               ? 'border-white ring-2 ring-emerald-400 shadow-lg scale-105'
                               : 'border-white/10 opacity-75 hover:opacity-100 hover:scale-105'
                           }`}
                           style={{ background: preset.bg }}
                         >
-                          {(bannerUrl === preset.bg || selectedBannerGradient === preset.bg) && (
+                          {selectedBannerGradient === preset.bg && (
                             <Check size={14} className="text-white mx-auto drop-shadow-md" />
                           )}
                         </button>
@@ -673,17 +634,17 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                       <button
                         type="button"
                         onClick={() => avatarFileInputRef.current?.click()}
-                        disabled={isUploadingAvatar}
+                        disabled={isSaving}
                         className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 flex items-center gap-1.5 transition-all shadow-md cursor-pointer disabled:opacity-50"
                       >
-                        {isUploadingAvatar ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
-                        <span>{isUploadingAvatar ? 'Uploading...' : 'Upload Avatar'}</span>
+                        <Upload size={13} />
+                        <span>Choose Avatar</span>
                       </button>
 
-                      {avatarUrl && (
+                      {(avatarUrl || avatarFile) && (
                         <button
                           type="button"
-                          onClick={() => setAvatarUrl('')}
+                          onClick={() => { setAvatarUrl(''); setAvatarFile(null) }}
                           className="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
                         >
                           Clear
@@ -703,18 +664,18 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                           key={preset.id}
                           type="button"
                           onClick={() => {
-                            setAvatarUrl('')
-                            setSelectedGradient(preset.bg)
+                            setAvatarUrl(preset.bg)
+                            setAvatarFile(null)
                           }}
                           title={preset.name}
                           className={`w-9 h-9 rounded-xl transition-all relative border ${
-                            !avatarUrl && selectedGradient === preset.bg
+                            selectedGradient === preset.bg
                               ? 'border-white ring-2 ring-emerald-400 shadow-lg scale-110'
                               : 'border-white/10 opacity-75 hover:opacity-100 hover:scale-105'
                           }`}
                           style={{ background: preset.bg }}
                         >
-                          {!avatarUrl && selectedGradient === preset.bg && (
+                          {selectedGradient === preset.bg && (
                             <Check size={14} className="text-white mx-auto drop-shadow-md" />
                           )}
                         </button>
@@ -778,7 +739,7 @@ export function UserSettingsModal({ isOpen, onClose }: UserSettingsModalProps) {
                     </button>
                   </div>
                 </form>
-              </div>
+              </fieldset>
             )}
 
             {/* ========================================================================= */}

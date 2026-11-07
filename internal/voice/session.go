@@ -52,7 +52,7 @@ func (m *VoiceSessionManager) GetOrCreateSession(channelID string) *VoiceSession
 	}
 
 	session := &VoiceSession{
-		ChannelID:   channelID,
+		ChannelID:    channelID,
 		Participants: make(map[string]*VoiceParticipant),
 	}
 	m.sessions[channelID] = session
@@ -66,7 +66,13 @@ func (m *VoiceSessionManager) Join(channelID, userID string) *VoiceParticipant {
 
 // JoinWithUser adds a participant with username/displayName to a voice session
 func (m *VoiceSessionManager) JoinWithUser(channelID, userID, username, displayName string) *VoiceParticipant {
-	session := m.GetOrCreateSession(channelID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	session := m.sessions[channelID]
+	if session == nil {
+		session = &VoiceSession{ChannelID: channelID, Participants: make(map[string]*VoiceParticipant)}
+		m.sessions[channelID] = session
+	}
 
 	session.mu.Lock()
 	defer session.mu.Unlock()
@@ -79,7 +85,8 @@ func (m *VoiceSessionManager) JoinWithUser(channelID, userID, username, displayN
 		if displayName != "" {
 			existing.DisplayName = displayName
 		}
-		return existing
+		copy := *existing
+		return &copy
 	}
 
 	participant := &VoiceParticipant{
@@ -89,7 +96,8 @@ func (m *VoiceSessionManager) JoinWithUser(channelID, userID, username, displayN
 		JoinedAt:    time.Now(),
 	}
 	session.Participants[userID] = participant
-	return participant
+	copy := *participant
+	return &copy
 }
 
 // Leave removes a participant from a voice session
@@ -131,7 +139,11 @@ func (m *VoiceSessionManager) GetParticipant(channelID, userID string) (*VoicePa
 	defer session.mu.RUnlock()
 
 	participant, exists := session.Participants[userID]
-	return participant, exists
+	if !exists {
+		return nil, false
+	}
+	copy := *participant
+	return &copy, true
 }
 
 // UpdateState updates a participant's state
@@ -144,6 +156,8 @@ func (m *VoiceSessionManager) UpdateState(channelID, userID string, selfMuted, d
 		return nil, false
 	}
 
+	session.mu.Lock()
+	defer session.mu.Unlock()
 	participant, exists := session.Participants[userID]
 	if !exists {
 		return nil, false
@@ -151,7 +165,8 @@ func (m *VoiceSessionManager) UpdateState(channelID, userID string, selfMuted, d
 
 	participant.SelfMuted = selfMuted
 	participant.Deafened = deafened
-	return participant, true
+	copy := *participant
+	return &copy, true
 }
 
 // MuteUser sets server-muted state for a participant
@@ -164,13 +179,16 @@ func (m *VoiceSessionManager) MuteUser(channelID, userID string) (*VoiceParticip
 		return nil, false
 	}
 
+	session.mu.Lock()
+	defer session.mu.Unlock()
 	participant, exists := session.Participants[userID]
 	if !exists {
 		return nil, false
 	}
 
 	participant.ServerMuted = true
-	return participant, true
+	copy := *participant
+	return &copy, true
 }
 
 // UnmuteUser removes server-muted state for a participant
@@ -183,13 +201,16 @@ func (m *VoiceSessionManager) UnmuteUser(channelID, userID string) (*VoicePartic
 		return nil, false
 	}
 
+	session.mu.Lock()
+	defer session.mu.Unlock()
 	participant, exists := session.Participants[userID]
 	if !exists {
 		return nil, false
 	}
 
 	participant.ServerMuted = false
-	return participant, true
+	copy := *participant
+	return &copy, true
 }
 
 // GetParticipants gets all participants in a session
@@ -207,7 +228,8 @@ func (m *VoiceSessionManager) GetParticipants(channelID string) []*VoiceParticip
 
 	result := make([]*VoiceParticipant, 0, len(session.Participants))
 	for _, p := range session.Participants {
-		result = append(result, p)
+		copy := *p
+		result = append(result, &copy)
 	}
 	return result
 }
@@ -254,7 +276,7 @@ func (m *VoiceSessionManager) RemoveUserFromAll(userID string) []string {
 func (m *VoiceSessionManager) SetScreenSharing(channelID, userID string, sharing bool) (*VoiceParticipant, bool) {
 	m.mu.RLock()
 	session, exists := m.sessions[channelID]
-	m.mu.RUnlock()
+	defer m.mu.RUnlock()
 
 	if !exists {
 		return nil, false
@@ -269,7 +291,8 @@ func (m *VoiceSessionManager) SetScreenSharing(channelID, userID string, sharing
 	}
 
 	participant.IsScreenSharing = sharing
-	return participant, true
+	copy := *participant
+	return &copy, true
 }
 
 // GetAllSessions returns a snapshot of all active voice sessions

@@ -1,11 +1,9 @@
 package upload
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/abdafwann/peace-parrot/pkg/cloudinary"
@@ -16,17 +14,15 @@ import (
 const MaxUploadSize = 10 * 1024 * 1024 // 10 MB
 
 type Handler struct {
-	cld       *cloudinary.Client
 	uploadDir string
 }
 
-func NewHandler(cld *cloudinary.Client, uploadDir string) *Handler {
+func NewHandler(_ *cloudinary.Client, uploadDir string) *Handler {
 	if uploadDir == "" {
 		uploadDir = "uploads"
 	}
 	_ = os.MkdirAll(uploadDir, 0755)
 	return &Handler{
-		cld:       cld,
 		uploadDir: uploadDir,
 	}
 }
@@ -56,9 +52,12 @@ func (h *Handler) UploadFile(c echo.Context) error {
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(file)
+	data, err := io.ReadAll(io.LimitReader(file, MaxUploadSize+1))
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read file content"})
+	}
+	if len(data) > MaxUploadSize {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "file size exceeds 10MB limit"})
 	}
 
 	fileID := uuid.New().String()
@@ -77,39 +76,10 @@ func (h *Handler) UploadFile(c echo.Context) error {
 		fileType = "audio"
 	}
 
-	// 1. Try Cloudinary if configured
-	if h.cld != nil && h.cld.IsConfigured() {
-		res, err := h.cld.UploadMedia(c.Request().Context(), data, originalName, "peace-parrot/attachments")
-		if err == nil && res.SecureURL != "" {
-			return c.JSON(http.StatusOK, FileResponse{
-				ID:       fileID,
-				URL:      res.SecureURL,
-				Filename: originalName,
-				Size:     fileHeader.Size,
-				Type:     fileType,
-				MimeType: mimeType,
-			})
-		}
-	}
-
-	// 2. Local Disk Fallback
-	safeExt := filepath.Ext(originalName)
-	savedFileName := fmt.Sprintf("%s%s", fileID, safeExt)
-	destPath := filepath.Join(h.uploadDir, savedFileName)
-
-	if err := os.WriteFile(destPath, data, 0644); err != nil {
+	localURL, err := SaveLocalFile(h.uploadDir, "", originalName, data)
+	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save file locally"})
 	}
-
-	scheme := "http"
-	if c.IsTLS() || c.Request().Header.Get("X-Forwarded-Proto") == "https" {
-		scheme = "https"
-	}
-	host := c.Request().Host
-	if host == "" {
-		host = "localhost:8080"
-	}
-	localURL := fmt.Sprintf("%s://%s/uploads/%s", scheme, host, savedFileName)
 
 	return c.JSON(http.StatusOK, FileResponse{
 		ID:       fileID,

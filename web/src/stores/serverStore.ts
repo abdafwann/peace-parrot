@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { useAuthStore } from './authStore'
 import { apiFetch } from '../utils/config'
+import { isCurrentSession } from '../utils/sessionGuard'
 
 export interface ServerSettings {
   id: string
@@ -51,7 +52,7 @@ interface ServerState {
   banUser: (userId: string) => Promise<boolean>
   unbanUser: (userId: string) => Promise<boolean>
   kickUser: (userId: string) => Promise<boolean>
-  muteUser: (userId: string, durationMinutes: number) => Promise<boolean>
+  muteUser: (userId: string) => Promise<boolean>
   unmuteUser: (userId: string) => Promise<boolean>
   updateMemberRole: (userId: string, role: string) => Promise<boolean>
   fetchRoles: () => Promise<void>
@@ -78,11 +79,12 @@ export const useServerStore = create<ServerState>((set) => ({
   error: null,
 
   fetchRoles: async () => {
+    const requestToken = useAuthStore.getState().token
     try {
       const res = await apiFetch('/api/server/roles')
       if (res.ok) {
         const data = await res.json()
-        if (Array.isArray(data) && data.length > 0) {
+        if (isCurrentSession(requestToken, useAuthStore.getState().token) && Array.isArray(data) && data.length > 0) {
           set({ roles: data })
         }
       }
@@ -104,6 +106,7 @@ export const useServerStore = create<ServerState>((set) => ({
       })
       if (res.ok) {
         const newRole = await res.json()
+        if (!isCurrentSession(token, useAuthStore.getState().token)) return null
         set((state) => ({ roles: [...state.roles, newRole] }))
         return newRole
       }
@@ -126,6 +129,7 @@ export const useServerStore = create<ServerState>((set) => ({
       })
       if (res.ok) {
         const updated = await res.json()
+        if (!isCurrentSession(token, useAuthStore.getState().token)) return false
         set((state) => ({
           roles: state.roles.map((r) => (r.id === id ? updated : r)),
         }))
@@ -151,6 +155,7 @@ export const useServerStore = create<ServerState>((set) => ({
 
       if (res.ok) {
         const data = await res.json()
+        if (!isCurrentSession(token, useAuthStore.getState().token)) return null
         if (data.iconUrl) {
           set((state) => ({
             roles: state.roles.map((r) => (r.id === id ? { ...r, iconUrl: data.iconUrl } : r)),
@@ -171,7 +176,7 @@ export const useServerStore = create<ServerState>((set) => ({
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` },
       })
-      if (res.ok) {
+      if (res.ok && isCurrentSession(token, useAuthStore.getState().token)) {
         set((state) => ({ roles: state.roles.filter((r) => r.id !== id) }))
         return true
       }
@@ -182,11 +187,12 @@ export const useServerStore = create<ServerState>((set) => ({
   },
 
   fetchSettings: async () => {
+    const requestToken = useAuthStore.getState().token
     try {
       const res = await apiFetch('/api/server')
       if (res.ok) {
         const data = await res.json()
-        set({ settings: data })
+        if (isCurrentSession(requestToken, useAuthStore.getState().token)) set({ settings: data })
       }
     } catch (err) {
       console.error('[ServerStore] Failed to fetch settings:', err)
@@ -195,8 +201,8 @@ export const useServerStore = create<ServerState>((set) => ({
 
   updateSettings: async (name, description, slowModeSeconds) => {
     set({ isLoading: true, error: null })
+    const token = useAuthStore.getState().token
     try {
-      const token = useAuthStore.getState().token
       const res = await apiFetch('/api/server', {
         method: 'PATCH',
         headers: {
@@ -212,21 +218,22 @@ export const useServerStore = create<ServerState>((set) => ({
 
       if (res.ok) {
         const data = await res.json()
+        if (!isCurrentSession(token, useAuthStore.getState().token)) return false
         set({ settings: data, isLoading: false })
         return true
       }
-      set({ error: 'Failed to update settings', isLoading: false })
+      if (isCurrentSession(token, useAuthStore.getState().token)) set({ error: 'Failed to update settings', isLoading: false })
       return false
     } catch (err: any) {
-      set({ error: err.message, isLoading: false })
+      if (isCurrentSession(token, useAuthStore.getState().token)) set({ error: err.message, isLoading: false })
       return false
     }
   },
 
   uploadIcon: async (file: File) => {
     set({ isLoading: true, error: null })
+    const token = useAuthStore.getState().token
     try {
-      const token = useAuthStore.getState().token
       const formData = new FormData()
       formData.append('icon', file)
 
@@ -240,16 +247,17 @@ export const useServerStore = create<ServerState>((set) => ({
 
       if (res.ok) {
         const data = await res.json()
+        if (!isCurrentSession(token, useAuthStore.getState().token)) return false
         set((state) => ({
           settings: state.settings ? { ...state.settings, iconUrl: data.iconUrl } : null,
           isLoading: false,
         }))
         return true
       }
-      set({ error: 'Failed to upload icon', isLoading: false })
+      if (isCurrentSession(token, useAuthStore.getState().token)) set({ error: 'Failed to upload icon', isLoading: false })
       return false
     } catch (err: any) {
-      set({ error: err.message, isLoading: false })
+      if (isCurrentSession(token, useAuthStore.getState().token)) set({ error: err.message, isLoading: false })
       return false
     }
   },
@@ -262,7 +270,7 @@ export const useServerStore = create<ServerState>((set) => ({
       })
       if (res.ok) {
         const data = await res.json()
-        set({ bans: data || [] })
+        if (isCurrentSession(token, useAuthStore.getState().token)) set({ bans: data || [] })
       }
     } catch (err) {
       console.error('[ServerStore] Failed to fetch bans:', err)
@@ -308,7 +316,7 @@ export const useServerStore = create<ServerState>((set) => ({
     }
   },
 
-  muteUser: async (userId: string, durationMinutes: number) => {
+  muteUser: async (userId: string) => {
     try {
       const token = useAuthStore.getState().token
       const res = await apiFetch(`/api/server/mutes/${userId}`, {
@@ -317,7 +325,6 @@ export const useServerStore = create<ServerState>((set) => ({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ durationMinutes }),
       })
       return res.ok
     } catch {

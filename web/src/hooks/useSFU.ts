@@ -6,6 +6,10 @@ import {
 } from '../stores/voiceStore'
 import { useWebSocketStore, type WSMessage } from '../stores/websocketStore'
 import { useSettingsStore } from '../stores/settingsStore'
+import { shouldEnableMicrophone } from '../utils/microphoneState'
+import { useBlockStore } from '../stores/blockStore'
+import { useAuthStore } from '../stores/authStore'
+import { remoteUserGain } from '../utils/blockBehavior'
 
 interface UserAudioNode {
   userId: string
@@ -24,6 +28,7 @@ export function useSFU() {
 
   const send = useWebSocketStore((state) => state.send)
   const subscribe = useWebSocketStore((state) => state.subscribe)
+	const isSocketConnected = useWebSocketStore((state) => state.isConnected)
 
   const settings = useSettingsStore()
 
@@ -39,7 +44,7 @@ export function useSFU() {
 
   // WebRTC Connection Lifecycle
   useEffect(() => {
-    if (!channelId) {
+    if (!channelId || !isSocketConnected) {
       cleanup()
       return
     }
@@ -122,9 +127,13 @@ export function useSFU() {
         localStreamRef.current = stream
 
         // Apply initial mute / PTT state
-        const isPTT = settings.inputMode === 'push_to_talk'
+        const isPTT = useSettingsStore.getState().inputMode === 'push_to_talk'
         stream.getAudioTracks().forEach((track) => {
-          track.enabled = isPTT ? false : !selfMuted
+          track.enabled = shouldEnableMicrophone({
+            pushToTalk: isPTT,
+            pushToTalkPressed: isPttPressedRef.current,
+            selfMuted: useVoiceStore.getState().selfMuted,
+          })
           pc.addTrack(track, stream)
         })
 
@@ -255,7 +264,7 @@ export function useSFU() {
       unsubscribe()
       cleanup()
     }
-  }, [channelId, subscribe, send])
+  }, [channelId, isSocketConnected, subscribe, send])
 
   // Setup Web Audio GainNode & Audio element routing for a remote user
   function setupRemoteAudioNode(userId: string, trackId: string, stream: MediaStream) {
@@ -289,7 +298,8 @@ export function useSFU() {
       const masterVol = (useSettingsStore.getState().outputVolume ?? 100) / 100
       const isDeafened = useVoiceStore.getState().selfDeafened
 
-      const effectiveGain = localMuted || isDeafened ? 0 : userVol * masterVol
+      const blocks = useBlockStore.getState()
+      const effectiveGain = remoteUserGain(blocks.blocked.has(userId), localMuted, isDeafened, userVol, masterVol, blocks.loaded && blocks.sessionToken === useAuthStore.getState().token)
       gainNode.gain.setValueAtTime(effectiveGain, ctx.currentTime)
 
       sourceNode.connect(gainNode)
@@ -332,7 +342,8 @@ export function useSFU() {
       if (node.gainNode) {
         const userVol = getSavedUserVolume(node.userId)
         const localMuted = getSavedUserLocalMute(node.userId)
-        const effectiveGain = localMuted || isDeafened ? 0 : userVol * masterVol
+        const blocks = useBlockStore.getState()
+        const effectiveGain = remoteUserGain(blocks.blocked.has(node.userId), localMuted, isDeafened, userVol, masterVol, blocks.loaded && blocks.sessionToken === useAuthStore.getState().token)
 
         node.gainNode.gain.setValueAtTime(effectiveGain, now)
       }
@@ -353,7 +364,8 @@ export function useSFU() {
           const localMuted = getSavedUserLocalMute(detail.userId)
           const masterVol = (useSettingsStore.getState().outputVolume ?? 100) / 100
           const isDeafened = useVoiceStore.getState().selfDeafened
-          const effectiveGain = localMuted || isDeafened ? 0 : userVol * masterVol
+          const blocks = useBlockStore.getState()
+          const effectiveGain = remoteUserGain(blocks.blocked.has(detail.userId), localMuted, isDeafened, userVol, masterVol, blocks.loaded && blocks.sessionToken === useAuthStore.getState().token)
 
           node.gainNode.gain.setValueAtTime(effectiveGain, ctx.currentTime)
         }
@@ -363,7 +375,10 @@ export function useSFU() {
     }
 
     window.addEventListener('user-volume-changed', handleVolumeEvent)
-    return () => window.removeEventListener('user-volume-changed', handleVolumeEvent)
+    const unsubscribeBlocks = useBlockStore.subscribe((state, previous) => {
+      if (state.blocked !== previous.blocked || state.loaded !== previous.loaded) syncAllUserGains()
+    })
+    return () => { window.removeEventListener('user-volume-changed', handleVolumeEvent); unsubscribeBlocks() }
   }, [])
 
   // Sync Push-to-Talk (PTT) key listeners
@@ -377,9 +392,13 @@ export function useSFU() {
       const keyMatch = e.code === settings.pttKey || e.key === settings.pttKey
       if (keyMatch && !isPttPressedRef.current) {
         isPttPressedRef.current = true
-        if (localStreamRef.current && !selfMuted) {
+        if (localStreamRef.current) {
           localStreamRef.current.getAudioTracks().forEach((track) => {
-            track.enabled = true
+            track.enabled = shouldEnableMicrophone({
+              pushToTalk: true,
+              pushToTalkPressed: true,
+              selfMuted: useVoiceStore.getState().selfMuted,
+            })
           })
         }
       }
@@ -410,9 +429,14 @@ export function useSFU() {
   useEffect(() => {
     if (localStreamRef.current) {
       const isPTT = settings.inputMode === 'push_to_talk'
-      localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = isPTT ? isPttPressedRef.current : !selfMuted
-      })
+        localStreamRef.current.getAudioTracks().forEach((track) => {
+          track.enabled = shouldEnableMicrophone({
+            pushToTalk: isPTT,
+            pushToTalkPressed: isPttPressedRef.current,
+            selfMuted,
+          })
+        })
+
     }
   }, [selfMuted, settings.inputMode])
 

@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Server, Globe, Check, AlertCircle, Loader2, X, RotateCcw, ArrowRight } from 'lucide-react'
+import { isSecureServerURL } from '../utils/endpointSecurity'
+import { probeServerHealth } from '../utils/serverHealth'
 import {
   getApiBaseUrl,
   DEFAULT_LOCAL_URL,
@@ -41,6 +43,12 @@ export function ServerConnectionModal({ isOpen, onClose }: ServerConnectionModal
     const cleanUrl = urlToTest.trim().replace(/\/+$/, '')
     if (!cleanUrl) return
 
+    if (!isSecureServerURL(cleanUrl)) {
+      setStatus('error')
+      setStatusMessage('Use HTTPS for remote servers. HTTP is only allowed on localhost.')
+      return
+    }
+
     setIsTesting(true)
     setStatus('idle')
     setStatusMessage('')
@@ -49,10 +57,7 @@ export function ServerConnectionModal({ isOpen, onClose }: ServerConnectionModal
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 3500)
 
-      const res = await fetch(`${cleanUrl}/health`, {
-        signal: controller.signal,
-        headers: { 'Cache-Control': 'no-cache' },
-      })
+      const res = await probeServerHealth(cleanUrl, controller.signal)
       clearTimeout(timeoutId)
 
       if (res.ok) {

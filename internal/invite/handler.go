@@ -66,7 +66,7 @@ func (h *Handler) Validate(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusBadRequest, "VALIDATION_ERROR", "Invite code parameter is required", nil)
 	}
 
-	inv, err := h.store.ValidateCode(code)
+	_, err := h.store.ValidateCode(code)
 	if err != nil {
 		if errors.Is(err, ErrInviteNotFound) {
 			return middleware.WriteError(c, http.StatusNotFound, "INVITE_NOT_FOUND", "Invite code not found", nil)
@@ -81,8 +81,6 @@ func (h *Handler) Validate(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusOK, map[string]interface{}{
-		"valid":     true,
-		"code":      inv.Code,
-		"createdBy": inv.CreatedBy,
+		"valid": true,
 	})
 }

@@ -3,6 +3,7 @@ package moderation
 import (
 	"database/sql"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/abdafwann/peace-parrot/pkg/database"
@@ -13,12 +14,42 @@ var ErrUserNotFound = errors.New("user not found")
 
 // Store handles moderation database operations
 type Store struct {
-	db *database.DB
+	db         *database.DB
+	voiceMu    sync.Mutex
+	voiceCache map[string]voiceAccess
+}
+
+type voiceAccess struct {
+	allowed   bool
+	checkedAt time.Time
 }
 
 // NewStore creates a new moderation store
 func NewStore(db *database.DB) *Store {
-	return &Store{db: db}
+	return &Store{db: db, voiceCache: make(map[string]voiceAccess)}
+}
+
+// VoiceAllowed caches moderation reads briefly and invalidates them atomically
+// with moderation writes. Failed checks are never cached as allowed.
+func (s *Store) VoiceAllowed(userID string) (bool, error) {
+	s.voiceMu.Lock()
+	defer s.voiceMu.Unlock()
+	if cached, ok := s.voiceCache[userID]; ok && time.Since(cached.checkedAt) < time.Second {
+		return cached.allowed, nil
+	}
+	banned, err := s.IsUserBanned(userID)
+	if err != nil {
+		delete(s.voiceCache, userID)
+		return false, err
+	}
+	muted, err := s.IsUserMuted(userID)
+	if err != nil {
+		delete(s.voiceCache, userID)
+		return false, err
+	}
+	allowed := !banned && !muted
+	s.voiceCache[userID] = voiceAccess{allowed: allowed, checkedAt: time.Now()}
+	return allowed, nil
 }
 
 // Mute represents a server mute
@@ -66,6 +97,9 @@ func (s *Store) IsUserMuted(userID string) (bool, error) {
 
 // MuteUser mutes a user
 func (s *Store) MuteUser(userID, mutedBy string, durationMinutes int) error {
+	s.voiceMu.Lock()
+	defer s.voiceMu.Unlock()
+	defer delete(s.voiceCache, userID)
 	// Check if user exists
 	var exists bool
 	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
@@ -89,6 +123,9 @@ func (s *Store) MuteUser(userID, mutedBy string, durationMinutes int) error {
 
 // UnmuteUser removes all active mutes for a user
 func (s *Store) UnmuteUser(userID string) error {
+	s.voiceMu.Lock()
+	defer s.voiceMu.Unlock()
+	defer delete(s.voiceCache, userID)
 	query := `DELETE FROM mutes WHERE user_id = ?`
 	_, err := s.db.Exec(query, userID)
 	return err
@@ -96,6 +133,9 @@ func (s *Store) UnmuteUser(userID string) error {
 
 // BanUser bans a user
 func (s *Store) BanUser(userID, bannedBy string) error {
+	s.voiceMu.Lock()
+	defer s.voiceMu.Unlock()
+	defer delete(s.voiceCache, userID)
 	// Check if user exists
 	var exists bool
 	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM users WHERE id = ?)", userID).Scan(&exists)
@@ -113,6 +153,9 @@ func (s *Store) BanUser(userID, bannedBy string) error {
 
 // UnbanUser unbans a user
 func (s *Store) UnbanUser(userID string) error {
+	s.voiceMu.Lock()
+	defer s.voiceMu.Unlock()
+	defer delete(s.voiceCache, userID)
 	query := `DELETE FROM bans WHERE user_id = ?`
 	_, err := s.db.Exec(query, userID)
 	return err

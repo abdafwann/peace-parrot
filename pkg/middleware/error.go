@@ -39,13 +39,13 @@ func WriteError(c echo.Context, statusCode int, code, message string, details in
 
 // Error codes
 const (
-	ErrInternal      = "INTERNAL_ERROR"
-	ErrValidation    = "VALIDATION_ERROR"
-	ErrUnauthorized  = "UNAUTHORIZED"
-	ErrForbidden     = "FORBIDDEN"
-	ErrNotFound      = "NOT_FOUND"
-	ErrConflict      = "CONFLICT"
-	ErrRateLimited   = "RATE_LIMIT_EXCEEDED"
+	ErrInternal     = "INTERNAL_ERROR"
+	ErrValidation   = "VALIDATION_ERROR"
+	ErrUnauthorized = "UNAUTHORIZED"
+	ErrForbidden    = "FORBIDDEN"
+	ErrNotFound     = "NOT_FOUND"
+	ErrConflict     = "CONFLICT"
+	ErrRateLimited  = "RATE_LIMIT_EXCEEDED"
 )
 
 // PanicRecoveryMiddleware catches panics and returns a generic 500 error
@@ -78,7 +78,7 @@ func RequestLoggerMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			time.Now().Format("2006-01-02 15:04:05"),
 			c.Response().Status,
 			c.Request().Method,
-			c.Request().URL.Path,
+			c.Path(),
 			c.RealIP(),
 			duration,
 		)
@@ -117,7 +117,7 @@ func CORSMiddleware(allowedOrigins ...string) echo.MiddlewareFunc {
 				}
 			}
 
-			c.Response().Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			c.Response().Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			c.Response().Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
 			if c.Request().Method == "OPTIONS" {

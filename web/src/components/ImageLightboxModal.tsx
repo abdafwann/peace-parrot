@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { X, Download, ExternalLink } from 'lucide-react'
+import { usePrivateMedia } from '../hooks/usePrivateMedia'
 
 interface ImageLightboxModalProps {
   isOpen: boolean
@@ -14,6 +15,7 @@ export function ImageLightboxModal({
   filename = 'image.png',
   onClose,
 }: ImageLightboxModalProps) {
+  const resolvedURL = usePrivateMedia(isOpen ? imageUrl : undefined)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
@@ -37,7 +39,7 @@ export function ImageLightboxModal({
         onClick={(e) => e.stopPropagation()}
       >
         <a
-          href={imageUrl}
+          href={resolvedURL}
           download={filename}
           target="_blank"
           rel="noopener noreferrer"
@@ -49,7 +51,7 @@ export function ImageLightboxModal({
         </a>
 
         <a
-          href={imageUrl}
+          href={resolvedURL}
           target="_blank"
           rel="noopener noreferrer"
           className="p-2 rounded-xl text-white/80 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
@@ -73,7 +75,7 @@ export function ImageLightboxModal({
         onClick={(e) => e.stopPropagation()}
       >
         <img
-          src={imageUrl}
+          src={resolvedURL}
           alt={filename}
           className="w-auto h-auto max-w-full max-h-[85vh] object-contain rounded-2xl"
         />

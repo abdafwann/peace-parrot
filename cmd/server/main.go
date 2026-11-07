@@ -65,7 +65,9 @@ func main() {
 	userStore := user.NewStore(db)
 	inviteStore := invite.NewStore(db)
 	inviteHandler := invite.NewHandler(inviteStore)
-	authHandler := auth.NewAuthHandler(userStore, inviteStore, jwtMgr)
+	moderationStore := moderation.NewStore(db)
+	authHandler := auth.NewAuthHandler(userStore, inviteStore, jwtMgr, moderationStore)
+	requireAuth := auth.JWTMiddleware(jwtMgr, moderationStore)
 
 	// Channel handler
 	channelStore := channel.NewStore(db)
@@ -78,8 +80,9 @@ func main() {
 	pinHandler := message.NewPinHandler(messageStore)
 
 	// Moderation handler
-	moderationStore := moderation.NewStore(db)
-	moderationHandler := moderation.NewHandler(moderationStore)
+	moderationHandler := moderation.NewHandler(moderationStore, func(userID string) {
+		hub.DisconnectUser(userID)
+	})
 
 	// Cloudinary client
 	cld := cloudinary.NewClient(cloudinary.Config{
@@ -90,6 +93,10 @@ func main() {
 
 	// User handler
 	userHandler := user.NewHandler(userStore, cld)
+	userHandler.SetProfileUpdateNotifier(func(profile user.UserResponse) {
+		hub.BroadcastAll("user_profile_updated", profile)
+	})
+	userHandler.SetBlocksUpdateNotifier(func(ownerID string) { hub.SendToUser(ownerID, "user_blocks_updated", nil) })
 
 	// Server settings handler
 	serverStore := server.NewStore(db)
@@ -100,16 +107,31 @@ func main() {
 	soundboardHandler := soundboard.NewHandler(soundboardStore, hub, userStore)
 
 	// Voice handler - needs broadcast function from hub
+	var wsHandler *WebSocketHandler
 	voiceHandler := voice.NewHandler(
 		func(userIDs []string, eventType string, payload interface{}) {
 			for _, userID := range userIDs {
-				hub.SendToUser(userID, eventType, payload)
+				if strings.HasPrefix(eventType, "webrtc_") {
+					if wsHandler != nil {
+						wsHandler.sendVoiceSignal(userID, eventType, payload)
+					}
+				} else if eventType == "voice_room_state" {
+					hub.QueueToUser(userID, eventType, payload)
+				} else {
+					hub.SendToUser(userID, eventType, payload)
+				}
 			}
 		},
 		func(eventType string, payload interface{}) {
 			hub.BroadcastAll(eventType, payload)
 		},
 	)
+	voiceHandler.SetMuteChecker(moderationStore)
+	voiceHandler.SetBanChecker(moderationStore)
+	voiceHandler.SetVoiceAccessChecker(moderationStore)
+	voiceHandler.SetChannelChecker(channelStore)
+	serverHandler.SetVoiceMuteNotifier(voiceHandler.SetAdminMute)
+	moderationHandler.SetVoiceMuteNotifier(voiceHandler.SetAdminMute)
 
 	// Create Echo instance
 	e := echo.New()
@@ -125,18 +147,18 @@ func main() {
 	e.GET("/health", healthCheck(db))
 
 	// WebSocket endpoint
-	wsHandler := NewWebSocketHandler(hub, voiceHandler, messageHandler, jwtMgr, cfg.Server.AllowedOrigins)
+	wsHandler = NewWebSocketHandler(hub, voiceHandler, messageHandler, jwtMgr, cfg.Server.AllowedOrigins, moderationStore)
 	e.GET("/ws", wsHandler.HandleWebSocket)
 
 	// API routes
 	api := e.Group("/api")
 
 	// Server settings routes (public view, admin protected updates)
-	api.GET("/server", serverHandler.GetServerSettings)
-	api.GET("/server/roles", serverHandler.ListRoles)
+	api.GET("/server", serverHandler.GetServerSettings, requireAuth)
+	api.GET("/server/roles", serverHandler.ListRoles, requireAuth)
 
 	// Admin protected server routes
-	adminServer := api.Group("/server", auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
+	adminServer := api.Group("/server", requireAuth, auth.RequireAdminMiddleware(userStore))
 	adminServer.PATCH("", serverHandler.UpdateServerSettings)
 	adminServer.POST("/icon", serverHandler.UploadServerIcon)
 	adminServer.GET("/bans", serverHandler.ListBans)
@@ -152,11 +174,12 @@ func main() {
 	adminServer.DELETE("/roles/:id", serverHandler.DeleteRole)
 
 	// Users routes
-	api.GET("/users", userHandler.List)
-	api.GET("/users/me", userHandler.GetMe, auth.JWTMiddleware(jwtMgr))
-	api.PATCH("/users/me", userHandler.UpdateMe, auth.JWTMiddleware(jwtMgr))
-	api.POST("/users/me/avatar", userHandler.UploadAvatar, auth.JWTMiddleware(jwtMgr))
-	api.POST("/users/me/banner", userHandler.UploadBanner, auth.JWTMiddleware(jwtMgr))
+	api.GET("/users", userHandler.List, requireAuth)
+	userHandler.RegisterBlockRoutes(api, requireAuth)
+	api.GET("/users/me", userHandler.GetMe, requireAuth)
+	api.PATCH("/users/me", userHandler.UpdateMe, requireAuth)
+	api.POST("/users/me/avatar", userHandler.UploadAvatar, requireAuth)
+	api.POST("/users/me/banner", userHandler.UploadBanner, requireAuth)
 
 	// Rate limiters
 	registerLimiter := auth.NewRateLimiter(5, time.Minute)
@@ -170,30 +193,30 @@ func main() {
 
 	// Invites routes
 	api.GET("/invites/validate/:code", inviteHandler.Validate)
-	api.GET("/invites", inviteHandler.List, auth.JWTMiddleware(jwtMgr))
-	api.POST("/invites", inviteHandler.Create, auth.JWTMiddleware(jwtMgr))
+	api.GET("/invites", inviteHandler.List, requireAuth)
+	api.POST("/invites", inviteHandler.Create, requireAuth)
 
 	// Channel routes
 	channels := api.Group("/channels")
-	channels.GET("", channelHandler.List)
-	channels.POST("", channelHandler.Create, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
-	channels.PATCH("/reorder", channelHandler.Reorder, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
-	channels.GET("/:id", channelHandler.Get)
-	channels.PATCH("/:id", channelHandler.Update, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
-	channels.DELETE("/:id", channelHandler.Delete, auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
+	channels.GET("", channelHandler.List, requireAuth)
+	channels.POST("", channelHandler.Create, requireAuth, auth.RequireAdminMiddleware(userStore))
+	channels.PATCH("/reorder", channelHandler.Reorder, requireAuth, auth.RequireAdminMiddleware(userStore))
+	channels.GET("/:id", channelHandler.Get, requireAuth)
+	channels.PATCH("/:id", channelHandler.Update, requireAuth, auth.RequireAdminMiddleware(userStore))
+	channels.DELETE("/:id", channelHandler.Delete, requireAuth, auth.RequireAdminMiddleware(userStore))
 
 	// Message routes
-	channels.GET("/:id/messages", messageHandler.List)
-	channels.POST("/:id/messages", messageHandler.Create, auth.JWTMiddleware(jwtMgr))
+	channels.GET("/:id/messages", messageHandler.List, requireAuth)
+	channels.POST("/:id/messages", messageHandler.Create, requireAuth)
 
 	// Pin routes
-	channels.GET("/:id/pins", pinHandler.ListPins)
-	channels.POST("/:id/pins/:messageId", pinHandler.Pin, auth.JWTMiddleware(jwtMgr))
-	channels.DELETE("/:id/pins/:messageId", pinHandler.Unpin, auth.JWTMiddleware(jwtMgr))
+	channels.GET("/:id/pins", pinHandler.ListPins, requireAuth)
+	channels.POST("/:id/pins/:messageId", pinHandler.Pin, requireAuth)
+	channels.DELETE("/:id/pins/:messageId", pinHandler.Unpin, requireAuth)
 
 	// Message CRUD routes
 	messages := api.Group("/messages")
-	messages.Use(auth.JWTMiddleware(jwtMgr))
+	messages.Use(requireAuth)
 	messages.PATCH("/:id", messageHandler.Update)
 	messages.DELETE("/:id", messageHandler.Delete)
 	messages.GET("/search", messageHandler.Search, auth.RateLimitMiddleware(searchLimiter))
@@ -205,7 +228,7 @@ func main() {
 
 	// Moderation routes
 	mod := api.Group("/moderation")
-	mod.Use(auth.JWTMiddleware(jwtMgr), auth.RequireAdminMiddleware(userStore))
+	mod.Use(requireAuth, auth.RequireAdminMiddleware(userStore))
 	mod.POST("/kick/:userId", moderationHandler.Kick)
 	mod.POST("/ban/:userId", moderationHandler.Ban)
 	mod.DELETE("/ban/:userId", moderationHandler.Unban)
@@ -214,32 +237,19 @@ func main() {
 	mod.GET("/status/:userId", moderationHandler.CheckStatus)
 
 	// Soundboard routes
-	api.GET("/soundboard", soundboardHandler.List)
-	api.POST("/soundboard", soundboardHandler.Create, auth.JWTMiddleware(jwtMgr))
-	api.DELETE("/soundboard/:id", soundboardHandler.Delete, auth.JWTMiddleware(jwtMgr))
+	api.GET("/soundboard", soundboardHandler.List, requireAuth)
+	api.POST("/soundboard", soundboardHandler.Create, requireAuth)
+	api.DELETE("/soundboard/:id", soundboardHandler.Delete, requireAuth)
 
 	// File / Media upload routes
 	uploadHandler := upload.NewHandler(cld, "uploads")
-	api.POST("/upload", uploadHandler.UploadFile, auth.JWTMiddleware(jwtMgr), auth.RateLimitMiddleware(uploadLimiter))
+	api.POST("/upload", uploadHandler.UploadFile, requireAuth, auth.RateLimitMiddleware(uploadLimiter))
 
-	uploadsGroup := e.Group("/uploads", func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			c.Response().Header().Set("Cache-Control", "public, max-age=604800")
-			c.Response().Header().Set("X-Content-Type-Options", "nosniff")
-			return next(c)
-		}
-	})
-	uploadsGroup.Static("", "uploads")
+	upload.RegisterPrivateFiles(e, "uploads", requireAuth)
 
 	// Serve frontend SPA web assets if present
 	if _, err := os.Stat("web/dist"); err == nil {
-		assetsGroup := e.Group("/assets", func(next echo.HandlerFunc) echo.HandlerFunc {
-			return func(c echo.Context) error {
-				c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
-				return next(c)
-			}
-		})
-		assetsGroup.Static("", "web/dist/assets")
+		registerFrontendAssets(e, "web/dist/assets")
 		e.GET("/*", func(c echo.Context) error {
 			path := c.Request().URL.Path
 			// Do not intercept API, WebSocket, or Uploads endpoints
@@ -277,6 +287,16 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 	log.Println("Server stopped")
+}
+
+func registerFrontendAssets(e *echo.Echo, dir string) {
+	assetsGroup := e.Group("/assets", func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+			return next(c)
+		}
+	})
+	assetsGroup.Static("/", dir)
 }
 
 // healthCheck returns server health status

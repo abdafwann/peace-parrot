@@ -87,7 +87,7 @@ func Load() *Config {
 			jwtSecret = hex.EncodeToString(randomBytes)
 			log.Println("[config] WARNING: JWT_SECRET not configured. Generated ephemeral secret for this session.")
 		} else {
-			jwtSecret = "fallback-ephemeral-secret-random-32chars"
+			log.Println("[config] ERROR: could not generate an ephemeral JWT secret")
 		}
 	}
 
@@ -110,6 +110,7 @@ func Load() *Config {
 			"http://127.0.0.1:5173",
 			"http://127.0.0.1:8080",
 			"tauri://localhost",
+			"http://tauri.localhost",
 			"https://tauri.localhost",
 		}
 	}
@@ -141,6 +142,9 @@ func Load() *Config {
 func (c *Config) Validate() error {
 	if len(c.JWT.Secret) < 16 {
 		return fmt.Errorf("JWT secret length must be at least 16 characters for cryptographic safety")
+	}
+	if c.JWT.Secret == "changeme-production-super-secret-key-64bytes" || c.JWT.Secret == "changeme-in-production" || c.JWT.Secret == "changeme-in-production-use-strong-secret" {
+		return fmt.Errorf("JWT secret must not use a known default value")
 	}
 	return nil
 }

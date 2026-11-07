@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { useShallow } from 'zustand/react/shallow'
 import { useVoiceStore } from './voiceStore'
+import { useAuthStore } from './authStore'
+import { clearChannelParticipants } from '../utils/voiceSnapshot'
 
 export type WSEventType =
   | 'channel_join'
@@ -23,7 +25,10 @@ export type WSEventType =
   | 'user_joined_voice'
   | 'user_left_voice'
   | 'user_muted'
+  | 'force_disconnect'
   | 'user_role_updated'
+  | 'user_profile_updated'
+  | 'user_blocks_updated'
   | 'role_created'
   | 'role_updated'
   | 'role_deleted'
@@ -131,6 +136,15 @@ export const useWebSocketStore = create<WebSocketState>()(
               )
             })
 
+            const voice = useVoiceStore.getState()
+            if (voice.channelId) {
+              ws.send(JSON.stringify({
+                type: 'voice_join',
+                channelId: voice.channelId,
+                payload: { channelId: voice.channelId, selfMuted: voice.selfMuted, selfDeafened: voice.selfDeafened },
+              }))
+            }
+
             // Flush pending messages
             if (pendingMessages.length > 0) {
               console.log('[WS] Flushing pending messages:', pendingMessages.length)
@@ -142,8 +156,17 @@ export const useWebSocketStore = create<WebSocketState>()(
           }
 
           ws.onclose = (event) => {
+            if (get().socket !== ws) return
             console.log('[WS] Disconnected', event.code, event.reason)
             set({ isConnected: false, isConnecting: false, socket: null })
+            useVoiceStore.setState({ participants: new Map() })
+
+            if (event.code === 1008) {
+              useAuthStore.getState().logout()
+              get().disconnect()
+              useVoiceStore.getState().reset()
+              return
+            }
 
             // If non-localhost failed, probe localhost fallback
             if (!currentWsUrl.includes('localhost:8080') && !currentWsUrl.includes('127.0.0.1:8080')) {
@@ -172,6 +195,7 @@ export const useWebSocketStore = create<WebSocketState>()(
           }
 
           ws.onmessage = (event) => {
+            if (get().socket !== ws) return
             try {
               const message: WSMessage = JSON.parse(event.data)
               console.log('[WS] Received:', message.type, message)
@@ -199,7 +223,9 @@ export const useWebSocketStore = create<WebSocketState>()(
         if (socket) {
           socket.close(1000, 'User logged out')
         }
-        set({ socket: null, isConnected: false, isConnecting: false, pendingMessages: [], reconnectTimer: null })
+        typingTimeouts.forEach((timer) => clearTimeout(timer))
+        typingTimeouts.clear()
+        set({ socket: null, isConnected: false, isConnecting: false, pendingMessages: [], reconnectTimer: null, subscribedChannels: new Set(), typingUsers: {} })
       },
 
       send: (message: WSMessage) => {
@@ -281,6 +307,12 @@ const typingTimeouts = new Map<string, ReturnType<typeof setTimeout>>()
 
 // Helper to handle incoming messages
 function handleMessage(message: WSMessage) {
+  if (message.type === 'force_disconnect') {
+    useAuthStore.getState().logout()
+    useWebSocketStore.getState().disconnect()
+    useVoiceStore.getState().reset()
+    return
+  }
   const { messageHandlers, typingUsers } = useWebSocketStore.getState()
 
   // Notify all component subscribers
@@ -365,6 +397,8 @@ function handleMessage(message: WSMessage) {
         displayName?: string
         self_muted?: boolean
         selfMuted?: boolean
+        server_muted?: boolean
+        serverMuted?: boolean
         muted?: boolean
         deafened?: boolean
         is_screen_sharing?: boolean
@@ -375,19 +409,21 @@ function handleMessage(message: WSMessage) {
     const channelId = (payload.channelId || message.channelId) as string
     const participants = payload.participants || []
     const voiceStore = useVoiceStore.getState()
-    const newMap = new Map(voiceStore.participants)
+    const newMap = clearChannelParticipants(voiceStore.participants, channelId)
 
     participants.forEach((p) => {
       const uid = p.user_id || p.userId
       if (uid) {
+        const previous = voiceStore.participants.get(uid)
         newMap.set(uid, {
           channelId,
           muted: Boolean(p.self_muted ?? p.selfMuted ?? p.muted),
+          adminMuted: Boolean(p.server_muted ?? p.serverMuted),
           deafened: Boolean(p.deafened),
           isScreenSharing: Boolean(p.is_screen_sharing ?? p.isScreenSharing),
           joinedAt: p.joined_at ? new Date(p.joined_at).getTime() : Date.now(),
-          localMuted: false,
-          volume: 1.0,
+          localMuted: previous?.localMuted ?? false,
+          volume: previous?.volume ?? 1.0,
           isSpeaking: false,
           username: p.username,
           displayName: p.display_name || p.displayName,
@@ -409,6 +445,7 @@ function handleMessage(message: WSMessage) {
       useVoiceStore.getState().addParticipant(uid, {
         channelId,
         muted: Boolean(user.self_muted ?? user.selfMuted ?? user.muted),
+        adminMuted: Boolean(user.server_muted ?? user.serverMuted),
         deafened: Boolean(user.deafened),
         isScreenSharing: Boolean(user.is_screen_sharing ?? user.isScreenSharing),
         joinedAt: user.joined_at ? new Date(user.joined_at).getTime() : Date.now(),
@@ -440,6 +477,13 @@ function handleMessage(message: WSMessage) {
         muted: Boolean(payload.selfMuted),
         deafened: Boolean(payload.selfDeafened),
       })
+    }
+  }
+
+  if (message.type === 'user_muted') {
+    const payload = (message.payload || {}) as { userId?: string; muted?: boolean }
+    if (payload.userId) {
+      useVoiceStore.getState().updateParticipant(payload.userId, { adminMuted: Boolean(payload.muted) })
     }
   }
 

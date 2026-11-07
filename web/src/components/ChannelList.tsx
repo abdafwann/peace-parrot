@@ -23,6 +23,8 @@ import { useAuthStore } from '../stores/authStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { CreateChannelModal } from './CreateChannelModal'
 import { UserVolumePopover } from './UserVolumePopover'
+import { PrivateImage } from './PrivateImage'
+import { useBlockStore } from '../stores/blockStore'
 
 export function ChannelList() {
   const channels = useChannelStore((state) => state.channels)
@@ -361,6 +363,7 @@ function VoiceChannelItem({
   onMoveUp,
   onMoveDown,
 }: VoiceChannelItemProps) {
+  const blocked = useBlockStore((state) => state.blocked)
   const isInVoice = useVoiceStore((state) => state.channelId !== null)
   const currentChannelId = useVoiceStore((state) => state.channelId)
   const participants = useVoiceStore((state) => state.participants)
@@ -516,7 +519,7 @@ function VoiceChannelItem({
               (user?.id && userId === user.id) ||
               (user?.username && participant.username?.toLowerCase() === user.username.toLowerCase())
             const isDeafened = isSelf ? selfDeafened : participant.deafened
-            const isMuted = isSelf ? selfMuted : participant.muted
+            const isMuted = participant.adminMuted || (isSelf ? selfMuted : participant.muted)
             const displayName = isSelf
               ? user?.displayName || user?.username || 'User'
               : participant.displayName || participant.username || `User ${userId.slice(0, 4)}`
@@ -534,7 +537,7 @@ function VoiceChannelItem({
                     handleOpenVolume(e, userId, displayName, participant.username, avatarUrl)
                   }
                 }}
-                className="group/user flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors bg-white/[0.02] hover:bg-white/[0.05] relative cursor-pointer"
+                className={`group/user flex items-center gap-2 px-2 py-1 rounded-lg text-xs transition-colors bg-white/[0.02] hover:bg-white/[0.05] relative cursor-pointer ${blocked.has(userId) ? 'opacity-40' : ''}`}
                 title={!isSelf ? 'Right click or click volume to adjust user volume' : undefined}
               >
                 {/* Avatar */}
@@ -548,7 +551,7 @@ function VoiceChannelItem({
                     }}
                   >
                     {avatarUrl ? (
-                      <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+                      <PrivateImage src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
                     ) : (
                       initial
                     )}
@@ -596,7 +599,7 @@ function VoiceChannelItem({
                 {/* Status indicators */}
                 <div className="flex items-center gap-1 shrink-0 text-slate-400">
                   {isMuted && (
-                    <span title="Muted" className="text-rose-400">
+                    <span title={participant.adminMuted ? 'Muted by admin' : 'Muted'} className="text-rose-400">
                       <MicOff size={13} />
                     </span>
                   )}

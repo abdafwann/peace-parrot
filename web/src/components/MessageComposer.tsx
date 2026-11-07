@@ -4,6 +4,7 @@ import { useWebSocketStore } from '../stores/websocketStore'
 import { useAuthStore } from '../stores/authStore'
 import { toast } from '../stores/toastStore'
 import { apiFetch } from '../utils/config'
+import { PrivateImage } from './PrivateImage'
 import {
   Send,
   Paperclip,
@@ -281,7 +282,7 @@ export function MessageComposer() {
                 >
                   {isImg ? (
                     <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-black/20">
-                      <img src={att.url} alt={att.filename} className="w-full h-full object-cover" />
+                      <PrivateImage src={att.url} alt={att.filename} className="w-full h-full object-cover" />
                     </div>
                   ) : (
                     <div className="w-10 h-10 rounded-lg bg-[var(--color-brand)]/20 text-[var(--color-brand)] flex items-center justify-center shrink-0">

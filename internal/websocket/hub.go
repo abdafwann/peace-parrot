@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -17,6 +19,7 @@ type Client struct {
 	Channels map[string]bool // subscribed channels
 	writeMu  sync.Mutex
 	mu       sync.RWMutex
+	active   atomic.Bool
 }
 
 // SendJSON writes JSON to the client safely with mutex lock
@@ -29,13 +32,18 @@ func (c *Client) SendJSON(v interface{}) error {
 // Hub manages all WebSocket connections
 type Hub struct {
 	clients    map[string]*Client
-	register   chan *Client
+	register   chan registerRequest
 	unregister chan *Client
 	broadcast  chan *Message
 	mu         sync.RWMutex
 
 	// Event handlers
 	voiceHandler VoiceHandler
+}
+
+type registerRequest struct {
+	client *Client
+	done   chan struct{}
 }
 
 // VoiceHandler interface for voice events
@@ -48,16 +56,18 @@ type VoiceHandler interface {
 
 // Message represents a WebSocket message
 type Message struct {
-	Type      string          `json:"type"`
-	ChannelID string          `json:"channelId,omitempty"`
-	Payload   json.RawMessage `json:"payload,omitempty"`
+	Type           string          `json:"type"`
+	ChannelID      string          `json:"channelId,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	targetClientID string
+	targetUserID   string
 }
 
 // NewHub creates a new WebSocket hub
 func NewHub() *Hub {
 	return &Hub{
 		clients:    make(map[string]*Client),
-		register:   make(chan *Client),
+		register:   make(chan registerRequest),
 		unregister: make(chan *Client),
 		broadcast:  make(chan *Message, 256),
 	}
@@ -83,7 +93,7 @@ func (h *Hub) SetVoiceHandler(handler VoiceHandler) {
 func (h *Hub) getOnlineUserIDsLocked() []string {
 	userSet := make(map[string]bool)
 	for _, c := range h.clients {
-		if c.UserID != "" {
+		if c.UserID != "" && c.active.Load() {
 			userSet[c.UserID] = true
 		}
 	}
@@ -105,25 +115,12 @@ func (h *Hub) GetOnlineUserIDs() []string {
 func (h *Hub) Run() {
 	for {
 		select {
-		case client := <-h.register:
+		case request := <-h.register:
+			client := request.client
 			h.mu.Lock()
 			h.clients[client.ID] = client
-			onlineIDs := h.getOnlineUserIDsLocked()
 			h.mu.Unlock()
-			log.Printf("WebSocket: Client %s connected (user: %s)", client.ID, client.UserID)
-
-			// Send presence snapshot to newly joined client
-			_ = client.SendJSON(Message{
-				Type:    "presence_sync",
-				Payload: MustMarshal(PresenceSyncPayload{OnlineUserIDs: onlineIDs}),
-			})
-
-			// Broadcast presence to all other clients
-			h.BroadcastAll("user_presence", PresencePayload{
-				UserID:   client.UserID,
-				Username: client.Username,
-				Status:   "online",
-			})
+			close(request.done)
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -136,14 +133,14 @@ func (h *Hub) Run() {
 				userID := client.UserID
 				hasOtherConnections := false
 				for _, c := range h.clients {
-					if c.UserID == userID {
+					if c.UserID == userID && c.active.Load() {
 						hasOtherConnections = true
 						break
 					}
 				}
 				h.mu.Unlock()
 
-				if !hasOtherConnections && userID != "" {
+				if client.active.Load() && !hasOtherConnections && userID != "" {
 					h.BroadcastAll("user_presence", PresencePayload{
 						UserID:   userID,
 						Username: client.Username,
@@ -159,7 +156,7 @@ func (h *Hub) Run() {
 			h.mu.RLock()
 			for _, client := range h.clients {
 				client.mu.RLock()
-				if message.ChannelID == "" || client.Channels[message.ChannelID] {
+				if client.active.Load() && (message.targetClientID == "" || message.targetClientID == client.ID) && (message.targetUserID == "" || message.targetUserID == client.UserID) && (message.ChannelID == "" || client.Channels[message.ChannelID]) {
 					if err := client.SendJSON(message); err != nil {
 						log.Printf("WebSocket: Error sending to client %s: %v", client.ID, err)
 					}
@@ -171,9 +168,35 @@ func (h *Hub) Run() {
 	}
 }
 
+// QueueToClient orders a targeted event with all other hub broadcasts.
+func (h *Hub) QueueToClient(clientID, eventType string, payload interface{}) {
+	h.broadcast <- &Message{Type: eventType, Payload: MustMarshal(payload), targetClientID: clientID}
+}
+
+// QueueToUser orders a user-targeted event with all other hub broadcasts.
+func (h *Hub) QueueToUser(userID, eventType string, payload interface{}) {
+	h.broadcast <- &Message{Type: eventType, Payload: MustMarshal(payload), targetUserID: userID}
+}
+
 // Register registers a new client
 func (h *Hub) Register(client *Client) {
-	h.register <- client
+	done := make(chan struct{})
+	h.register <- registerRequest{client: client, done: done}
+	<-done
+}
+
+// Activate publishes presence only after the connection's authorization checks.
+func (h *Hub) Activate(client *Client) {
+	h.mu.Lock()
+	if _, ok := h.clients[client.ID]; !ok {
+		h.mu.Unlock()
+		return
+	}
+	client.active.Store(true)
+	onlineIDs := h.getOnlineUserIDsLocked()
+	h.mu.Unlock()
+	_ = client.SendJSON(Message{Type: "presence_sync", Payload: MustMarshal(PresenceSyncPayload{OnlineUserIDs: onlineIDs})})
+	h.BroadcastAll("user_presence", PresencePayload{UserID: client.UserID, Username: client.Username, Status: "online"})
 }
 
 // Unregister unregisters a client
@@ -203,11 +226,38 @@ func (h *Hub) SendToUser(userID, eventType string, payload interface{}) {
 	defer h.mu.RUnlock()
 
 	for _, client := range h.clients {
-		if client.UserID == userID {
+		if client.UserID == userID && client.active.Load() {
 			if err := client.SendJSON(msg); err != nil {
 				log.Printf("WebSocket: Error sending to user %s: %v", userID, err)
 			}
 		}
+	}
+}
+
+// SendToClient sends an event to a specific active connection.
+func (h *Hub) SendToClient(clientID, eventType string, payload interface{}) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	client := h.clients[clientID]
+	if client != nil && client.active.Load() {
+		_ = client.SendJSON(Message{Type: eventType, Payload: MustMarshal(payload)})
+	}
+}
+
+// DisconnectUser closes every active connection for a user. The read pump
+// performs the normal unregister and voice cleanup after the close.
+func (h *Hub) DisconnectUser(userID string) {
+	h.mu.RLock()
+	var clients []*Client
+	for _, client := range h.clients {
+		if client.UserID == userID {
+			clients = append(clients, client)
+		}
+	}
+	h.mu.RUnlock()
+	for _, client := range clients {
+		_ = client.Conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.ClosePolicyViolation, "account banned"), time.Now().Add(time.Second))
+		_ = client.Conn.Close()
 	}
 }
 

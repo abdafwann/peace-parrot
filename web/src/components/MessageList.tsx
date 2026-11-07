@@ -10,8 +10,13 @@ import { ReactionPicker, ReactionDisplay } from './ReactionPicker'
 import { LinkPreviews } from './LinkPreview'
 import { RoleBadge } from './RoleBadge'
 import { ImageLightboxModal } from './ImageLightboxModal'
+import { PrivateImage } from './PrivateImage'
+import { useBlockStore } from '../stores/blockStore'
+import { visibleMessages } from '../utils/blockBehavior'
+import { PrivateAudio, PrivateLink, PrivateVideo } from './PrivateMedia'
 import { useSettingsStore } from '../stores/settingsStore'
 import { playSoundEffect, showDesktopNotification } from '../utils/soundEffects'
+import { resolveMessageAuthor } from '../utils/messageAuthor'
 
 interface Reaction {
   emoji: string
@@ -79,12 +84,17 @@ function formatMessageTime(dateInput: string | Date | undefined): string {
 }
 
 export function MessageList() {
+  const blocked = useBlockStore((state) => state.blocked)
+  const currentToken = useAuthStore((state) => state.token)
+  const blocksLoaded = useBlockStore((state) => state.loaded && state.sessionToken === currentToken)
+  const blocksError = useBlockStore((state) => state.error)
   const activeChannelId = useChannelStore((s) => s.activeChannelId)
   const bottomRef = useRef<HTMLDivElement>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(true)
   const [usersMap, setUsersMap] = useState<Record<string, any>>({})
   const usersMapRef = useRef<Record<string, any>>({})
+  const usersRevision = useRef(0)
   useEffect(() => {
     usersMapRef.current = usersMap
   }, [usersMap])
@@ -97,10 +107,11 @@ export function MessageList() {
 
   // Fetch roles and registered users map
   const fetchUsers = () => {
+    const revision = usersRevision.current
     apiFetch('/api/users')
       .then((r) => r.json())
       .then((list) => {
-        if (Array.isArray(list)) {
+        if (revision === usersRevision.current && Array.isArray(list)) {
           const map: Record<string, any> = {}
           list.forEach((u: any) => {
             if (u.id) map[u.id] = u
@@ -174,6 +185,15 @@ export function MessageList() {
     const unsubscribe = subscribe((message: WSMessage) => {
       if (message.type === 'presence_sync' || message.type === 'user_presence' || message.type === 'user_role_updated') {
         fetchUsers()
+      }
+
+      if (message.type === 'user_profile_updated') {
+        const profile = message.payload as { id?: string; username?: string }
+        if (profile.id) {
+          usersRevision.current++
+          setUsersMap((previous) => ({ ...previous, [profile.id!]: profile, ...(profile.username ? { [profile.username.toLowerCase()]: profile } : {}) }))
+          fetchUsers()
+        }
       }
 
       if (message.type === 'message') {
@@ -355,6 +375,20 @@ export function MessageList() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages.length])
 
+  // Optimistic reaction updates dispatched through parent state to prevent direct prop mutation
+  const handleUpdateReactions = useCallback((messageId: string, newReactions: Reaction[]) => {
+    setMessages((prev) =>
+      prev.map((msg) =>
+        msg.id === messageId ? { ...msg, reactions: newReactions } : msg
+      )
+    )
+  }, [])
+
+  const handleOpenLightbox = useCallback((url: string, filename?: string) => {
+    setLightboxImage({ url, filename })
+  }, [])
+
+  const shownMessages = visibleMessages(messages, blocked, blocksLoaded)
   if (!activeChannelId) {
     return (
       <div className="flex-1 flex items-center justify-center text-[var(--color-text-muted)]">
@@ -371,24 +405,13 @@ export function MessageList() {
     )
   }
 
-  // Optimistic reaction updates dispatched through parent state to prevent direct prop mutation
-  const handleUpdateReactions = useCallback((messageId: string, newReactions: Reaction[]) => {
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId ? { ...msg, reactions: newReactions } : msg
-      )
-    )
-  }, [])
-
-  const handleOpenLightbox = useCallback((url: string, filename?: string) => {
-    setLightboxImage({ url, filename })
-  }, [])
+  if (!blocksLoaded) return <div className="flex-1 flex items-center justify-center text-sm text-slate-400">{blocksError ? <span>Could not load blocked users. <button className="text-emerald-400 underline" onClick={() => void useBlockStore.getState().fetchBlocks()}>Retry</button></span> : 'Loading blocked users…'}</div>
 
   return (
     <>
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        {messages.length === 0 ? (
+        {shownMessages.length === 0 ? (
           <div className="h-full flex items-center justify-center">
             <div className="text-center">
               <p className="text-lg mb-2 text-[var(--color-text-secondary)]">No messages yet</p>
@@ -397,8 +420,8 @@ export function MessageList() {
           </div>
         ) : (
           <>
-            {messages.map((msg, index) => {
-              const prevMsg = messages[index - 1]
+            {shownMessages.map((msg, index) => {
+              const prevMsg = shownMessages[index - 1]
               let isStacked = false
 
               if (prevMsg && !msg.deletedAt && !prevMsg.deletedAt) {
@@ -475,6 +498,7 @@ const MessageItem = memo(function MessageItem({
   const authorUser =
     usersMap[message.authorId] ||
     (message.authorName ? usersMap[message.authorName.toLowerCase()] : null)
+  const author = resolveMessageAuthor(message, authorUser)
   const roleName = authorUser?.role || 'Member'
   const userRole =
     roles.find(
@@ -622,21 +646,21 @@ const MessageItem = memo(function MessageItem({
               <div
                 className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center text-sm font-semibold text-white overflow-hidden shadow-sm"
                 style={{
-                  background: message.authorAvatarUrl
+                  background: author.avatarUrl
                     ? 'transparent'
                     : 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))',
                 }}
               >
-                {message.authorAvatarUrl ? (
-                  <img
-                    src={getOptimizedImageUrl(message.authorAvatarUrl, 80, 80)}
-                    alt={message.authorName || 'Avatar'}
+                {author.avatarUrl ? (
+                  <PrivateImage
+                    src={getOptimizedImageUrl(author.avatarUrl, 80, 80)}
+                    alt={author.name}
                     loading="lazy"
                     decoding="async"
                     className="w-full h-full object-cover"
                   />
                 ) : (
-                  (message.authorName || 'U')[0].toUpperCase()
+                  author.name[0].toUpperCase()
                 )}
               </div>
             )}
@@ -652,7 +676,7 @@ const MessageItem = memo(function MessageItem({
                 className="font-semibold text-sm cursor-pointer hover:underline leading-snug"
                 style={{ color: userRole?.color || 'var(--color-text-primary)' }}
               >
-                {message.authorName || 'User'}
+                {author.name}
               </span>
               {userRole && <RoleBadge role={userRole} roleName={roleName} className="self-center" />}
               <span className="text-[11px] text-[var(--color-text-muted)] leading-snug">
@@ -700,7 +724,7 @@ const MessageItem = memo(function MessageItem({
                           onClick={() => onOpenLightbox(att.url, att.filename)}
                           className="relative rounded-2xl overflow-hidden cursor-pointer group bg-black/20 max-w-sm max-h-80 border border-[var(--color-border-default)] hover:border-[var(--color-brand)] transition-all shadow-md"
                         >
-                          <img
+                          <PrivateImage
                             src={att.url}
                             alt={att.filename}
                             className="w-auto h-auto max-h-72 object-contain group-hover:scale-[1.02] transition-transform duration-200"
@@ -719,7 +743,7 @@ const MessageItem = memo(function MessageItem({
                           <div className="text-xs font-semibold mb-1.5 truncate text-[var(--color-text-primary)]">
                             {att.filename}
                           </div>
-                          <audio controls src={att.url} className="w-full h-8" />
+                          <PrivateAudio controls src={att.url} className="w-full h-8" />
                         </div>
                       )
                     }
@@ -730,13 +754,13 @@ const MessageItem = memo(function MessageItem({
                           key={att.id}
                           className="rounded-2xl overflow-hidden max-w-md bg-black border border-[var(--color-border-default)] shadow-md"
                         >
-                          <video controls src={att.url} className="w-full max-h-80" />
+                          <PrivateVideo controls src={att.url} className="w-full max-h-80" />
                         </div>
                       )
                     }
 
                     return (
-                      <a
+                      <PrivateLink
                         key={att.id}
                         href={att.url}
                         download={att.filename}
@@ -756,7 +780,7 @@ const MessageItem = memo(function MessageItem({
                           </div>
                         </div>
                         <Download size={16} className="text-[var(--color-text-muted)] group-hover:text-[var(--color-brand)] shrink-0" />
-                      </a>
+                      </PrivateLink>
                     )
                   })}
                 </div>

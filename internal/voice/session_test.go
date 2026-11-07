@@ -1,8 +1,38 @@
 package voice
 
 import (
+	"sync"
 	"testing"
 )
+
+func TestConcurrentVoiceParticipantUpdates(t *testing.T) {
+	m := NewVoiceSessionManager()
+	m.Join("room", "user")
+	var group sync.WaitGroup
+	group.Add(3)
+	go func() {
+		defer group.Done()
+		for i := 0; i < 100; i++ {
+			m.JoinWithUser("room", "user", "name", "")
+		}
+	}()
+	go func() {
+		defer group.Done()
+		for i := 0; i < 100; i++ {
+			m.UpdateState("room", "user", i%2 == 0, false)
+		}
+	}()
+	go func() {
+		defer group.Done()
+		for i := 0; i < 100; i++ {
+			for _, p := range m.GetParticipants("room") {
+				_ = p.SelfMuted
+				_ = p.Username
+			}
+		}
+	}()
+	group.Wait()
+}
 
 func TestVoiceSessionManager_Join(t *testing.T) {
 	mgr := NewVoiceSessionManager()

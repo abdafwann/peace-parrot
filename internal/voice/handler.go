@@ -3,6 +3,9 @@ package voice
 import (
 	"encoding/json"
 	"log"
+	"sync"
+
+	"github.com/abdafwann/peace-parrot/internal/channel"
 )
 
 // WSEvent represents a WebSocket event
@@ -25,8 +28,8 @@ type VoiceLeavePayload struct {
 
 // VoiceStateUpdatePayload for voice_state_update event
 type VoiceStateUpdatePayload struct {
-	ChannelID   string `json:"channelId"`
-	SelfMuted   bool   `json:"selfMuted"`
+	ChannelID    string `json:"channelId"`
+	SelfMuted    bool   `json:"selfMuted"`
 	SelfDeafened bool   `json:"selfDeafened"`
 }
 
@@ -56,8 +59,8 @@ type WebRTCICEPayload struct {
 
 // VoiceRoomStatePayload sent to client on join
 type VoiceRoomStatePayload struct {
-	ChannelID    string               `json:"channelId"`
-	Participants []*VoiceParticipant  `json:"participants"`
+	ChannelID    string              `json:"channelId"`
+	Participants []*VoiceParticipant `json:"participants"`
 }
 
 // UserJoinedVoicePayload broadcast when user joins
@@ -106,16 +109,61 @@ type Handler struct {
 	sfu            *SFUEngine
 	broadcastFn    BroadcastFunc
 	broadcastAllFn BroadcastAllFunc
+	muteChecker    interface{ IsUserMuted(string) (bool, error) }
+	banChecker     interface{ IsUserBanned(string) (bool, error) }
+	voiceAccess    interface{ VoiceAllowed(string) (bool, error) }
+	channelChecker interface {
+		GetChannelByID(string) (*channel.Channel, error)
+	}
+	moderationMu sync.Mutex
+	eventMu      sync.Mutex
+}
+
+func (h *Handler) SetVoiceAccessChecker(checker interface{ VoiceAllowed(string) (bool, error) }) {
+	h.voiceAccess = checker
+}
+
+func (h *Handler) SetBanChecker(checker interface{ IsUserBanned(string) (bool, error) }) {
+	h.banChecker = checker
+}
+
+func (h *Handler) SetChannelChecker(checker interface {
+	GetChannelByID(string) (*channel.Channel, error)
+}) {
+	h.channelChecker = checker
+}
+
+// SetMuteChecker supplies the persistent administrator mute state.
+func (h *Handler) SetMuteChecker(checker interface{ IsUserMuted(string) (bool, error) }) {
+	h.muteChecker = checker
 }
 
 // NewHandler creates a new voice handler
 func NewHandler(broadcast BroadcastFunc, broadcastAll BroadcastAllFunc) *Handler {
-	return &Handler{
+	h := &Handler{
 		manager:        NewVoiceSessionManager(),
 		sfu:            NewSFUEngine(),
 		broadcastFn:    broadcast,
 		broadcastAllFn: broadcastAll,
 	}
+	h.sfu.SetCanForward(h.canForwardAudio)
+	return h
+}
+
+func (h *Handler) canForwardAudio(userID string) bool {
+	if h.voiceAccess != nil {
+		allowed, err := h.voiceAccess.VoiceAllowed(userID)
+		return err == nil && allowed
+	}
+	if h.muteChecker == nil || h.banChecker == nil {
+		return false
+	}
+	banned, err := h.banChecker.IsUserBanned(userID)
+	if err != nil || banned {
+		return false
+	}
+	muted, err := h.muteChecker.IsUserMuted(userID)
+	return err == nil && !muted
 }
 
 // GetManager returns the voice session manager
@@ -128,23 +176,57 @@ func (h *Handler) GetSFU() *SFUEngine {
 	return h.sfu
 }
 
+func (h *Handler) ValidateVoiceJoin(userID string, p VoiceJoinPayload) error {
+	if p.ChannelID == "" {
+		return ErrInvalidPayload("channelId is required")
+	}
+	if h.banChecker == nil {
+		return ErrInvalidPayload("ban status unavailable")
+	}
+	banned, err := h.banChecker.IsUserBanned(userID)
+	if err != nil || banned {
+		return ErrInvalidPayload("voice access denied")
+	}
+	if h.channelChecker == nil {
+		return ErrInvalidPayload("channel status unavailable")
+	}
+	ch, err := h.channelChecker.GetChannelByID(p.ChannelID)
+	if err != nil || ch == nil || ch.Type != "voice" {
+		return ErrInvalidPayload("invalid voice channel")
+	}
+	if h.muteChecker == nil {
+		return ErrInvalidPayload("mute status unavailable")
+	}
+	return nil
+}
+
 // HandleVoiceJoin handles voice_join event
 func (h *Handler) HandleVoiceJoin(userID, username string, payload []byte) (interface{}, error) {
+	h.eventMu.Lock()
+	defer h.eventMu.Unlock()
 	var p VoiceJoinPayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return nil, err
 	}
-
-	if p.ChannelID == "" {
-		return nil, ErrInvalidPayload("channelId is required")
+	if err := h.ValidateVoiceJoin(userID, p); err != nil {
+		return nil, err
+	}
+	h.moderationMu.Lock()
+	muted, err := h.muteChecker.IsUserMuted(userID)
+	if err != nil {
+		h.moderationMu.Unlock()
+		return nil, err
 	}
 
 	// Join the session
 	participant := h.manager.JoinWithUser(p.ChannelID, userID, username, "")
-	if p.SelfMuted || p.SelfDeafened {
-		if updated, ok := h.manager.UpdateState(p.ChannelID, userID, p.SelfMuted, p.SelfDeafened); ok {
-			participant = updated
-		}
+	if muted {
+		participant, _ = h.manager.MuteUser(p.ChannelID, userID)
+	} else {
+		participant, _ = h.manager.UnmuteUser(p.ChannelID, userID)
+	}
+	if updated, ok := h.manager.UpdateState(p.ChannelID, userID, p.SelfMuted, p.SelfDeafened); ok {
+		participant = updated
 	}
 
 	// Ensure SFU room exists
@@ -160,16 +242,20 @@ func (h *Handler) HandleVoiceJoin(userID, username string, payload []byte) (inte
 			User:      participant,
 		})
 	}
+	state := VoiceRoomStatePayload{ChannelID: p.ChannelID, Participants: participants}
+	if h.broadcastFn != nil {
+		h.broadcastFn([]string{userID}, "voice_room_state", state)
+	}
+	h.moderationMu.Unlock()
 
 	// Return current room state to the joining user
-	return VoiceRoomStatePayload{
-		ChannelID:    p.ChannelID,
-		Participants: participants,
-	}, nil
+	return state, nil
 }
 
 // HandleVoiceLeave handles voice_leave event
 func (h *Handler) HandleVoiceLeave(userID string, payload []byte) error {
+	h.eventMu.Lock()
+	defer h.eventMu.Unlock()
 	var p VoiceLeavePayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return err
@@ -177,6 +263,9 @@ func (h *Handler) HandleVoiceLeave(userID string, payload []byte) error {
 
 	if p.ChannelID == "" {
 		return ErrInvalidPayload("channelId is required")
+	}
+	if _, ok := h.manager.GetParticipant(p.ChannelID, userID); !ok {
+		return ErrUserNotInVoice
 	}
 
 	// Remove peer from SFU room
@@ -216,6 +305,9 @@ func (h *Handler) HandleWebRTCOffer(userID string, payload []byte) (interface{},
 		return nil, ErrInvalidPayload("channelId is required")
 	}
 
+	if _, ok := h.manager.GetParticipant(p.ChannelID, userID); !ok {
+		return nil, ErrUserNotInVoice
+	}
 	room := h.sfu.GetOrCreateRoom(p.ChannelID, h.broadcastFn)
 	answer, err := room.HandleOffer(userID, p.SDP)
 	if err != nil {
@@ -246,6 +338,9 @@ func (h *Handler) HandleWebRTCAnswer(userID string, payload []byte) error {
 		return ErrInvalidPayload("channelId is required")
 	}
 
+	if _, ok := h.manager.GetParticipant(p.ChannelID, userID); !ok {
+		return ErrUserNotInVoice
+	}
 	room := h.sfu.GetRoom(p.ChannelID)
 	if room == nil {
 		return ErrInvalidPayload("voice room not found")
@@ -272,6 +367,9 @@ func (h *Handler) HandleWebRTCICE(userID string, payload []byte) error {
 		return ErrInvalidPayload("channelId is required")
 	}
 
+	if _, ok := h.manager.GetParticipant(p.ChannelID, userID); !ok {
+		return ErrUserNotInVoice
+	}
 	room := h.sfu.GetRoom(p.ChannelID)
 	if room == nil {
 		return ErrInvalidPayload("voice room not found")
@@ -282,6 +380,8 @@ func (h *Handler) HandleWebRTCICE(userID string, payload []byte) error {
 
 // HandleVoiceStateUpdate handles voice_state_update event
 func (h *Handler) HandleVoiceStateUpdate(userID string, payload []byte) error {
+	h.eventMu.Lock()
+	defer h.eventMu.Unlock()
 	var p VoiceStateUpdatePayload
 	if err := json.Unmarshal(payload, &p); err != nil {
 		return err
@@ -373,8 +473,32 @@ func (h *Handler) UnmuteUser(channelID, userID string) error {
 	return nil
 }
 
+// SetAdminMute updates every active session for an administratively muted user.
+func (h *Handler) SetAdminMute(userID string, muted bool) {
+	h.eventMu.Lock()
+	defer h.eventMu.Unlock()
+	h.moderationMu.Lock()
+	defer h.moderationMu.Unlock()
+	if h.muteChecker != nil {
+		current, err := h.muteChecker.IsUserMuted(userID)
+		if err != nil {
+			return
+		}
+		muted = current
+	}
+	for _, channelID := range h.manager.GetUserChannels(userID) {
+		if muted {
+			_ = h.MuteUser(channelID, userID)
+		} else {
+			_ = h.UnmuteUser(channelID, userID)
+		}
+	}
+}
+
 // RemoveUser handles user disconnect cleanup
 func (h *Handler) RemoveUser(userID string) {
+	h.eventMu.Lock()
+	defer h.eventMu.Unlock()
 	channels := h.manager.RemoveUserFromAll(userID)
 
 	for _, channelID := range channels {
@@ -388,6 +512,18 @@ func (h *Handler) RemoveUser(userID string) {
 			})
 		}
 		log.Printf("Voice: User %s disconnected from channel %s", userID, channelID)
+	}
+}
+
+// SendSnapshots serializes snapshot creation with voice changes and their broadcasts.
+func (h *Handler) SendSnapshots(send func(VoiceRoomStatePayload)) {
+	h.eventMu.Lock()
+	defer h.eventMu.Unlock()
+	for _, session := range h.manager.GetAllSessions() {
+		participants := h.manager.GetParticipants(session.ChannelID)
+		if len(participants) > 0 {
+			send(VoiceRoomStatePayload{ChannelID: session.ChannelID, Participants: participants})
+		}
 	}
 }
 

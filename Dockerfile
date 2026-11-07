@@ -1,6 +1,6 @@
 # Multi-stage Dockerfile for Roompeak (PeaceParrot) Backend
 # Stage 1: Build
-FROM golang:1.24-alpine AS builder
+FROM golang:1.26.6-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache gcc musl-dev git

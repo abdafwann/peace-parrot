@@ -2,7 +2,6 @@ package auth
 
 import (
 	"errors"
-	"os"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -61,7 +60,7 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 			return nil, ErrTokenInvalid
 		}
 		return m.secret, nil
-	})
+	}, jwt.WithExpirationRequired(), jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Alg()}))
 
 	if err != nil {
 		if errors.Is(err, jwt.ErrTokenExpired) {
@@ -76,12 +75,4 @@ func (m *JWTManager) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	return claims, nil
-}
-
-// GetJWTSecret returns JWT secret from environment or default
-func GetJWTSecret() string {
-	if secret := os.Getenv("JWT_SECRET"); secret != "" {
-		return secret
-	}
-	return "changeme-in-production"
 }

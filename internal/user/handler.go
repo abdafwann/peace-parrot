@@ -1,19 +1,13 @@
 package user
 
 import (
-	"context"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
-	"os"
-	"path/filepath"
-	"strings"
-	"time"
 
+	"github.com/abdafwann/peace-parrot/internal/upload"
 	"github.com/abdafwann/peace-parrot/pkg/cloudinary"
 	"github.com/abdafwann/peace-parrot/pkg/middleware"
-	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 )
 
@@ -35,8 +29,34 @@ type UserResponse struct {
 
 // Handler handles user HTTP requests
 type Handler struct {
-	store *Store
-	cld   *cloudinary.Client
+	store               *Store
+	cld                 *cloudinary.Client
+	notifyProfileUpdate func(UserResponse)
+	notifyBlocksUpdate  func(string)
+}
+
+func (h *Handler) SetProfileUpdateNotifier(notify func(UserResponse)) {
+	h.notifyProfileUpdate = notify
+}
+
+func profileResponse(u *User) UserResponse {
+	displayName := u.DisplayName
+	if displayName == "" {
+		displayName = u.Username
+	}
+	role := u.Role
+	if role == "" {
+		role = "Member"
+	}
+	return UserResponse{ID: u.ID, Username: u.Username, DisplayName: displayName, AvatarURL: u.AvatarURL, BannerURL: u.BannerURL, Bio: u.Bio, Role: role}
+}
+
+func (h *Handler) respondWithUpdatedProfile(c echo.Context, u *User) error {
+	profile := profileResponse(u)
+	if h.notifyProfileUpdate != nil {
+		h.notifyProfileUpdate(profile)
+	}
+	return c.JSON(http.StatusOK, profile)
 }
 
 // NewHandler creates a new user handler
@@ -150,20 +170,7 @@ func (h *Handler) UpdateMe(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update profile", nil)
 	}
 
-	displayName := u.DisplayName
-	if displayName == "" {
-		displayName = u.Username
-	}
-
-	return c.JSON(http.StatusOK, UserResponse{
-		ID:          u.ID,
-		Username:    u.Username,
-		DisplayName: displayName,
-		AvatarURL:   u.AvatarURL,
-		BannerURL:   u.BannerURL,
-		Bio:         u.Bio,
-		Role:        "Member",
-	})
+	return h.respondWithUpdatedProfile(c, u)
 }
 
 // UploadAvatar handles POST /api/users/me/avatar
@@ -193,75 +200,21 @@ func (h *Handler) UploadAvatar(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to process file", nil)
 	}
 
-	var avatarURL string
-	var avatarPublicID string
-
-	// If Cloudinary is configured, upload to Cloudinary
-	if h.cld != nil && h.cld.IsConfigured() {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 30*time.Second)
-		defer cancel()
-
-		res, err := h.cld.UploadMedia(ctx, fileBytes, fileHeader.Filename, "peace-parrot/avatars")
-		if err != nil {
-			log.Printf("[UploadAvatar] Cloudinary upload error: %v", err)
-			return middleware.WriteError(c, http.StatusInternalServerError, "CLOUDINARY_ERROR", "Failed to upload avatar to cloud storage", nil)
-		}
-		avatarURL = res.SecureURL
-		avatarPublicID = res.PublicID
-	} else {
-		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
-		if ext == "" || (!strings.HasPrefix(ext, ".jpg") && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif") {
-			ext = ".png"
-		}
-		dir := filepath.Join("uploads", "avatars")
-		_ = os.MkdirAll(dir, 0755)
-		filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
-		dest := filepath.Join(dir, filename)
-		if err := os.WriteFile(dest, fileBytes, 0644); err != nil {
-			return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to save avatar", nil)
-		}
-		avatarURL = fmt.Sprintf("/uploads/avatars/%s", filename)
-		avatarPublicID = ""
+	avatarURL, err := upload.SaveLocalFile("uploads", "avatars", fileHeader.Filename, fileBytes)
+	if err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to save avatar", nil)
 	}
 
-	// Update user in DB and retrieve old public ID for deletion
-	oldPublicID, err := h.store.UpdateAvatar(userID, avatarURL, avatarPublicID)
+	_, err = h.store.UpdateAvatar(userID, avatarURL, "")
 	if err != nil {
-		// Rollback safety: if DB update fails, delete the newly uploaded image immediately
-		if avatarPublicID != "" && h.cld != nil {
-			go func() {
-				_ = h.cld.DeleteMedia(context.Background(), avatarPublicID)
-			}()
-		}
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update user avatar", nil)
 	}
 
-	// If old avatar had a Cloudinary public ID, delete it in background goroutine
-	if oldPublicID != "" && h.cld != nil {
-		go func(idToDelete string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			if err := h.cld.DeleteMedia(ctx, idToDelete); err != nil {
-				log.Printf("[UploadAvatar] Warning: Failed to delete old avatar %s: %v", idToDelete, err)
-			}
-		}(oldPublicID)
+	u, err := h.store.GetUserByID(userID)
+	if err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read updated profile", nil)
 	}
-
-	u, _ := h.store.GetUserByID(userID)
-	displayName := u.DisplayName
-	if displayName == "" {
-		displayName = u.Username
-	}
-
-	return c.JSON(http.StatusOK, UserResponse{
-		ID:          u.ID,
-		Username:    u.Username,
-		DisplayName: displayName,
-		AvatarURL:   u.AvatarURL,
-		BannerURL:   u.BannerURL,
-		Bio:         u.Bio,
-		Role:        "Member",
-	})
+	return h.respondWithUpdatedProfile(c, u)
 }
 
 // UploadBanner handles POST /api/users/me/banner
@@ -291,73 +244,19 @@ func (h *Handler) UploadBanner(c echo.Context) error {
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to process banner file", nil)
 	}
 
-	var bannerURL string
-	var bannerPublicID string
-
-	// If Cloudinary is configured, upload to Cloudinary
-	if h.cld != nil && h.cld.IsConfigured() {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 30*time.Second)
-		defer cancel()
-
-		res, err := h.cld.UploadMedia(ctx, fileBytes, fileHeader.Filename, "peace-parrot/banners")
-		if err != nil {
-			log.Printf("[UploadBanner] Cloudinary upload error: %v", err)
-			return middleware.WriteError(c, http.StatusInternalServerError, "CLOUDINARY_ERROR", "Failed to upload banner to cloud storage", nil)
-		}
-		bannerURL = res.SecureURL
-		bannerPublicID = res.PublicID
-	} else {
-		ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
-		if ext == "" || (!strings.HasPrefix(ext, ".jpg") && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif") {
-			ext = ".png"
-		}
-		dir := filepath.Join("uploads", "banners")
-		_ = os.MkdirAll(dir, 0755)
-		filename := fmt.Sprintf("%s%s", uuid.New().String(), ext)
-		dest := filepath.Join(dir, filename)
-		if err := os.WriteFile(dest, fileBytes, 0644); err != nil {
-			return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to save banner", nil)
-		}
-		bannerURL = fmt.Sprintf("/uploads/banners/%s", filename)
-		bannerPublicID = ""
+	bannerURL, err := upload.SaveLocalFile("uploads", "banners", fileHeader.Filename, fileBytes)
+	if err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to save banner", nil)
 	}
 
-	// Update user in DB and retrieve old banner public ID
-	oldPublicID, err := h.store.UpdateBanner(userID, bannerURL, bannerPublicID)
+	_, err = h.store.UpdateBanner(userID, bannerURL, "")
 	if err != nil {
-		// Rollback safety
-		if bannerPublicID != "" && h.cld != nil {
-			go func() {
-				_ = h.cld.DeleteMedia(context.Background(), bannerPublicID)
-			}()
-		}
 		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to update user banner", nil)
 	}
 
-	// Delete previous banner from Cloudinary in background goroutine
-	if oldPublicID != "" && h.cld != nil {
-		go func(idToDelete string) {
-			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-			defer cancel()
-			if err := h.cld.DeleteMedia(ctx, idToDelete); err != nil {
-				log.Printf("[UploadBanner] Warning: Failed to delete old banner %s: %v", idToDelete, err)
-			}
-		}(oldPublicID)
+	u, err := h.store.GetUserByID(userID)
+	if err != nil {
+		return middleware.WriteError(c, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to read updated profile", nil)
 	}
-
-	u, _ := h.store.GetUserByID(userID)
-	displayName := u.DisplayName
-	if displayName == "" {
-		displayName = u.Username
-	}
-
-	return c.JSON(http.StatusOK, UserResponse{
-		ID:          u.ID,
-		Username:    u.Username,
-		DisplayName: displayName,
-		AvatarURL:   u.AvatarURL,
-		BannerURL:   u.BannerURL,
-		Bio:         u.Bio,
-		Role:        "Member",
-	})
+	return h.respondWithUpdatedProfile(c, u)
 }

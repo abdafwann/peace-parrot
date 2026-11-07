@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/abdafwann/peace-parrot/internal/auth"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestJWTManager_GenerateAndValidateToken(t *testing.T) {
@@ -29,6 +30,17 @@ func TestJWTManager_GenerateAndValidateToken(t *testing.T) {
 	}
 	if claims.Username != "testuser" {
 		t.Errorf("claims.Username = %q, want %q", claims.Username, "testuser")
+	}
+}
+
+func TestJWTManagerRejectsTokenWithoutExpiry(t *testing.T) {
+	secret := "test-secret-key"
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, auth.Claims{UserID: "user", Username: "user"}).SignedString([]byte(secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.NewJWTManager(secret, 7).ValidateToken(token); err == nil {
+		t.Fatal("token without expiration was accepted")
 	}
 }
 

@@ -32,6 +32,8 @@ Thumbs.db
 
 # Local env
 .env
+.env.*
+!.env.example
 .opencodeignore
 
 
@@ -59,12 +61,17 @@ web/dist/
 # Temp and Agent files
 *~
 *.md
+*.MD
 *.bak
 .claude/
 web/.claude/
 .agents/
 web/.agents/
+.opencode/
+opencode.json
+opencode.jsonc
+.codex/
+.cursor/
 web/skills-lock.json
-
 
 

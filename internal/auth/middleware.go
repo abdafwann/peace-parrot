@@ -13,7 +13,11 @@ import (
 const ClaimsContextKey = "claims"
 
 // JWTMiddleware validates JWT tokens
-func JWTMiddleware(jwtMgr *JWTManager) echo.MiddlewareFunc {
+type BanChecker interface {
+	IsUserBanned(userID string) (bool, error)
+}
+
+func JWTMiddleware(jwtMgr *JWTManager, bans BanChecker) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
 			authHeader := c.Request().Header.Get("Authorization")
@@ -34,6 +38,16 @@ func JWTMiddleware(jwtMgr *JWTManager) echo.MiddlewareFunc {
 					return middleware.WriteError(c, http.StatusUnauthorized, "TOKEN_EXPIRED", "Session expired. Please log in again.", nil)
 				}
 				return middleware.WriteError(c, http.StatusUnauthorized, "TOKEN_INVALID", "Invalid token", nil)
+			}
+			if bans == nil {
+				return middleware.WriteError(c, http.StatusServiceUnavailable, "MODERATION_UNAVAILABLE", "Unable to check account status", nil)
+			}
+			banned, err := bans.IsUserBanned(claims.UserID)
+			if err != nil {
+				return middleware.WriteError(c, http.StatusServiceUnavailable, "MODERATION_UNAVAILABLE", "Unable to check account status", nil)
+			}
+			if banned {
+				return middleware.WriteError(c, http.StatusForbidden, "USER_BANNED", "Account is banned", nil)
 			}
 
 			// Store claims and userId in context

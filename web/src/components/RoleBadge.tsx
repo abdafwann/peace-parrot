@@ -1,4 +1,5 @@
 import { Role, useServerStore } from '../stores/serverStore'
+import { PrivateImage } from './PrivateImage'
 
 interface RoleBadgeProps {
   role?: Role | { name?: string; color?: string; iconUrl?: string } | null
@@ -33,7 +34,7 @@ export function RoleBadge({ role, roleName, showName = false, className = '' }: 
       title={effectiveRole.name || 'Role'}
     >
       {isImageIcon ? (
-        <img
+        <PrivateImage
           src={effectiveRole.iconUrl}
           alt={effectiveRole.name || 'Role'}
           className="w-3.5 h-3.5 rounded-sm object-contain shrink-0 shadow-sm"

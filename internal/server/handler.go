@@ -1,15 +1,14 @@
 package server
 
 import (
-	"context"
 	"io"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strings"
 
 	"github.com/abdafwann/peace-parrot/internal/auth"
 	"github.com/abdafwann/peace-parrot/internal/moderation"
+	"github.com/abdafwann/peace-parrot/internal/upload"
 	"github.com/abdafwann/peace-parrot/internal/user"
 	"github.com/abdafwann/peace-parrot/internal/websocket"
 	"github.com/abdafwann/peace-parrot/pkg/cloudinary"
@@ -23,7 +22,10 @@ type Handler struct {
 	modStore    *moderation.Store
 	cld         *cloudinary.Client
 	hub         *websocket.Hub
+	voiceMute   func(string, bool)
 }
+
+func (h *Handler) SetVoiceMuteNotifier(notify func(string, bool)) { h.voiceMute = notify }
 
 // NewHandler creates a new server handler
 func NewHandler(
@@ -128,27 +130,14 @@ func (h *Handler) UploadServerIcon(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read file"})
 	}
 
-	if h.cld == nil || !h.cld.IsConfigured() {
-		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "Cloudinary is not configured on the server"})
-	}
-
-	uploadResult, err := h.cld.UploadMedia(c.Request().Context(), data, fileHeader.Filename, "peace-parrot/server")
+	iconURL, err := upload.SaveLocalFile("uploads", "server", fileHeader.Filename, data)
 	if err != nil {
-		log.Printf("[ServerIcon] Upload error: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to upload image to cloud storage"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save server icon"})
 	}
 
-	oldPublicID, err := h.serverStore.UpdateServerIcon(uploadResult.SecureURL, uploadResult.PublicID)
+	_, err = h.serverStore.UpdateServerIcon(iconURL, "")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update server icon"})
-	}
-
-	if oldPublicID != "" && oldPublicID != uploadResult.PublicID {
-		go func() {
-			if err := h.cld.DeleteMedia(context.Background(), oldPublicID); err != nil {
-				log.Printf("[ServerIcon] Failed to delete previous icon %s: %v", oldPublicID, err)
-			}
-		}()
 	}
 
 	settings, _ := h.serverStore.GetServerSettings()
@@ -174,7 +163,7 @@ func (h *Handler) BanUser(c echo.Context) error {
 	claims := auth.GetClaims(c)
 	bannedBy := "admin"
 	if claims != nil {
-		bannedBy = claims.Username
+		bannedBy = claims.UserID
 	}
 
 	if err := h.modStore.BanUser(targetUserID, bannedBy); err != nil {
@@ -183,7 +172,7 @@ func (h *Handler) BanUser(c echo.Context) error {
 
 	// Disconnect user's active WebSockets if connected
 	if h.hub != nil {
-		h.hub.SendToUser(targetUserID, "force_disconnect", map[string]string{"reason": "You have been banned from this server."})
+		h.hub.DisconnectUser(targetUserID)
 		h.hub.BroadcastAll("user_banned", map[string]string{"userId": targetUserID})
 	}
 
@@ -223,24 +212,17 @@ func (h *Handler) KickUser(c echo.Context) error {
 // MuteUser mutes a user
 func (h *Handler) MuteUser(c echo.Context) error {
 	targetUserID := c.Param("userId")
-	var req MuteMemberRequest
-	_ = c.Bind(&req)
-
 	claims := auth.GetClaims(c)
 	mutedBy := "admin"
 	if claims != nil {
-		mutedBy = claims.Username
+		mutedBy = claims.UserID
 	}
 
-	if err := h.modStore.MuteUser(targetUserID, mutedBy, req.DurationMinutes); err != nil {
+	if err := h.modStore.MuteUser(targetUserID, mutedBy, 0); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to mute user"})
 	}
-
-	if h.hub != nil {
-		h.hub.BroadcastAll("user_muted", map[string]interface{}{
-			"userId": targetUserID,
-			"muted":  true,
-		})
+	if h.voiceMute != nil {
+		h.voiceMute(targetUserID, true)
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "user muted successfully"})
@@ -252,12 +234,8 @@ func (h *Handler) UnmuteUser(c echo.Context) error {
 	if err := h.modStore.UnmuteUser(targetUserID); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to unmute user"})
 	}
-
-	if h.hub != nil {
-		h.hub.BroadcastAll("user_muted", map[string]interface{}{
-			"userId": targetUserID,
-			"muted":  false,
-		})
+	if h.voiceMute != nil {
+		h.voiceMute(targetUserID, false)
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{"message": "user unmuted successfully"})
@@ -373,7 +351,7 @@ func (h *Handler) UploadRoleIcon(c echo.Context) error {
 	defer file.Close()
 
 	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
-	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif" && ext != ".svg" {
+	if ext != ".jpg" && ext != ".jpeg" && ext != ".png" && ext != ".webp" && ext != ".gif" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "unsupported file format"})
 	}
 
@@ -382,39 +360,26 @@ func (h *Handler) UploadRoleIcon(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to read file data"})
 	}
 
-	if h.cld == nil || !h.cld.IsConfigured() {
-		return c.JSON(http.StatusServiceUnavailable, map[string]string{"error": "Cloudinary is not configured on the server"})
-	}
-
-	uploadResult, err := h.cld.UploadMedia(c.Request().Context(), data, fileHeader.Filename, "peace-parrot/roles")
+	iconURL, err := upload.SaveLocalFile("uploads", "roles", fileHeader.Filename, data)
 	if err != nil {
-		log.Printf("[RoleIcon] Upload error: %v", err)
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to upload role icon"})
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to save role icon"})
 	}
 
-	oldPublicID, err := h.serverStore.UpdateRoleIcon(roleID, uploadResult.SecureURL, uploadResult.PublicID)
+	_, err = h.serverStore.UpdateRoleIcon(roleID, iconURL, "")
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update role icon in database"})
-	}
-
-	if oldPublicID != "" && oldPublicID != uploadResult.PublicID {
-		go func() {
-			if err := h.cld.DeleteMedia(context.Background(), oldPublicID); err != nil {
-				log.Printf("[RoleIcon] Failed to delete previous icon %s: %v", oldPublicID, err)
-			}
-		}()
 	}
 
 	if h.hub != nil {
 		h.hub.BroadcastAll("role_updated", map[string]interface{}{
 			"id":      roleID,
-			"iconUrl": uploadResult.SecureURL,
+			"iconUrl": iconURL,
 		})
 	}
 
 	return c.JSON(http.StatusOK, map[string]string{
 		"message": "role icon uploaded successfully",
-		"iconUrl": uploadResult.SecureURL,
+		"iconUrl": iconURL,
 	})
 }
 

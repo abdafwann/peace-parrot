@@ -9,6 +9,7 @@ import { BottomSidebar } from './BottomSidebar'
 import { MemberList } from './MemberList'
 import { ServerSettingsModal } from './ServerSettingsModal'
 import { CreateChannelModal } from './CreateChannelModal'
+import { PrivateImage } from './PrivateImage'
 import { APP_VERSION } from '../utils/config'
 
 interface LayoutProps {
@@ -70,7 +71,7 @@ export function Layout({ children }: LayoutProps) {
             <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-500 via-[var(--color-brand)] to-cyan-400 p-[1.5px] shrink-0 shadow-md shadow-emerald-500/10">
               <div className="w-full h-full rounded-[10px] bg-[#0e131f] flex items-center justify-center overflow-hidden">
                 {serverSettings?.iconUrl ? (
-                  <img src={serverSettings.iconUrl} alt="Server" className="w-full h-full object-cover" />
+                  <PrivateImage src={serverSettings.iconUrl} alt="Server" className="w-full h-full object-cover" />
                 ) : (
                   <Bird size={18} className="text-emerald-400" />
                 )}

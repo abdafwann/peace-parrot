@@ -6,24 +6,33 @@ import (
 	"log"
 	"sync"
 
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 )
 
 // SFUEngine manages WebRTC SFU rooms for voice channels
 type SFUEngine struct {
-	rooms   map[string]*SFURoom
-	mu      sync.RWMutex
-	webrtcAPI *webrtc.API
+	rooms      map[string]*SFURoom
+	mu         sync.RWMutex
+	webrtcAPI  *webrtc.API
+	canForward func(string) bool
 }
 
 // SFURoom represents a voice channel room with connected peers and audio tracks
 type SFURoom struct {
-	channelID   string
-	peers       map[string]*Peer
-	tracks      map[string]*webrtc.TrackLocalStaticRTP // key: publisher userID
-	sendToUser  BroadcastFunc
-	webrtcAPI   *webrtc.API
-	mu          sync.RWMutex
+	channelID  string
+	peers      map[string]*Peer
+	tracks     map[string]*webrtc.TrackLocalStaticRTP // key: publisher userID
+	sendToUser BroadcastFunc
+	webrtcAPI  *webrtc.API
+	canForward func(string) bool
+	mu         sync.RWMutex
+}
+
+func (e *SFUEngine) SetCanForward(check func(string) bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.canForward = check
 }
 
 // Peer represents a connected WebRTC peer in an SFU room
@@ -66,6 +75,7 @@ func (e *SFUEngine) GetOrCreateRoom(channelID string, broadcast BroadcastFunc) *
 			tracks:     make(map[string]*webrtc.TrackLocalStaticRTP),
 			sendToUser: broadcast,
 			webrtcAPI:  e.webrtcAPI,
+			canForward: e.canForward,
 		}
 		e.rooms[channelID] = room
 		log.Printf("[SFU] Created room for channel %s", channelID)
@@ -173,19 +183,14 @@ func (r *SFURoom) HandleOffer(userID string, sdp string) (*webrtc.SessionDescrip
 				defer func() {
 					log.Printf("[SFU] Stopped forwarding track for user %s", userID)
 				}()
-				for {
-					pkt, _, readErr := trackRemote.ReadRTP()
-					if readErr != nil {
-						if readErr != io.EOF {
-							log.Printf("[SFU] ReadRTP error from user %s: %v", userID, readErr)
-						}
-						return
-					}
-
-					if writeErr := localTrack.WriteRTP(pkt); writeErr != nil && writeErr != io.ErrClosedPipe {
-						log.Printf("[SFU] WriteRTP error for user %s: %v", userID, writeErr)
-						return
-					}
+				err := forwardAudio(func() (*rtp.Packet, error) {
+					packet, _, err := trackRemote.ReadRTP()
+					return packet, err
+				}, localTrack.WriteRTP, func() bool {
+					return r.canForward != nil && r.canForward(userID)
+				})
+				if err != nil && err != io.EOF && err != io.ErrClosedPipe {
+					log.Printf("[SFU] Audio forwarding error for user %s: %v", userID, err)
 				}
 			}()
 		})
@@ -239,6 +244,20 @@ func (r *SFURoom) HandleOffer(userID string, sdp string) (*webrtc.SessionDescrip
 
 	log.Printf("[SFU] Generated WebRTC answer for user %s in channel %s", userID, r.channelID)
 	return &answer, nil
+}
+
+func forwardAudio(read func() (*rtp.Packet, error), write func(*rtp.Packet) error, allowed func() bool) error {
+	for {
+		packet, err := read()
+		if err != nil {
+			return err
+		}
+		if allowed() {
+			if err := write(packet); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // subscribePeerToTrack attaches a published track to a subscriber peer

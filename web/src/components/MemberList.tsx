@@ -1,10 +1,13 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Crown, Shield, Volume2, Search, Moon } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useVoiceStore } from '../stores/voiceStore'
 import { useWebSocketStore } from '../stores/websocketStore'
 import { useServerStore } from '../stores/serverStore'
 import { RoleBadge } from './RoleBadge'
+import { PrivateImage } from './PrivateImage'
+import { MemberMenu } from './MemberMenu'
+import { useBlockStore } from '../stores/blockStore'
 import { apiFetch, getOptimizedImageUrl } from '../utils/config'
 
 export interface Member {
@@ -12,6 +15,7 @@ export interface Member {
   username: string
   displayName?: string
   avatarUrl?: string
+  bannerUrl?: string
   bio?: string
   role: string
   status: 'online' | 'idle' | 'dnd' | 'offline'
@@ -78,17 +82,20 @@ export function MemberList() {
   const fetchRoles = useServerStore((state) => state.fetchRoles)
 
   const [rawUsers, setRawUsers] = useState<any[]>([])
+  const usersRevision = useRef(0)
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
+  const [selection, setSelection] = useState<{ id: string; anchor: { x: number; y: number } } | null>(null)
 
   // Reusable function to fetch users list from backend
   const fetchUsers = async () => {
+    const revision = usersRevision.current
     try {
       const res = await apiFetch('/api/users')
       if (res.ok) {
         const data = await res.json()
-        if (Array.isArray(data) && data.length > 0) {
+        if (revision === usersRevision.current && Array.isArray(data) && data.length > 0) {
           setRawUsers(data)
         }
       }
@@ -129,6 +136,13 @@ export function MemberList() {
           })
           fetchUsers()
         }
+      } else if (msg.type === 'user_profile_updated') {
+        const profile = msg.payload as { id?: string }
+        if (profile.id) {
+          usersRevision.current++
+          setRawUsers((previous) => previous.map((user) => user.id === profile.id ? profile : user))
+          fetchUsers()
+        }
       } else if (msg.type === 'user_role_updated' || msg.type === 'role_created' || msg.type === 'role_updated' || msg.type === 'role_deleted') {
         fetchRoles()
         fetchUsers()
@@ -160,7 +174,8 @@ export function MemberList() {
         id,
         username,
         displayName,
-        avatarUrl: u.avatarUrl || u.AvatarURL,
+          avatarUrl: u.avatarUrl || u.AvatarURL,
+          bannerUrl: u.bannerUrl || u.BannerURL,
         bio: u.bio || u.Bio,
         role,
         status: isOnline ? 'online' : 'offline',
@@ -294,6 +309,7 @@ export function MemberList() {
             isInVoice={isInVoice}
             participants={participants}
             roleColor={cat.color}
+            onSelect={(member, anchor) => setSelection({ id: member.id, anchor })}
           />
         ))}
 
@@ -308,9 +324,11 @@ export function MemberList() {
             isInVoice={false}
             participants={participants}
             isOffline
+            onSelect={(member, anchor) => setSelection({ id: member.id, anchor })}
           />
         )}
       </div>
+      {selection && members.find((member) => member.id === selection.id) && <MemberMenu key={selection.id} member={members.find((member) => member.id === selection.id)!} anchor={selection.anchor} onClose={() => setSelection(null)} />}
     </aside>
   )
 }
@@ -326,6 +344,7 @@ interface MemberCategoryProps {
   participants?: Map<string, any>
   roleColor?: string
   isOffline?: boolean
+  onSelect: (member: Member, anchor: { x: number; y: number }) => void
 }
 
 function MemberCategory({
@@ -339,6 +358,7 @@ function MemberCategory({
   participants,
   roleColor,
   isOffline,
+  onSelect,
 }: MemberCategoryProps) {
   return (
     <div>
@@ -374,6 +394,7 @@ function MemberCategory({
               inVoice={inVoiceNow}
               roleColor={roleColor}
               isOffline={isOffline}
+              onSelect={onSelect}
             />
           )
         })}
@@ -387,22 +408,26 @@ interface MemberItemProps {
   inVoice?: boolean
   roleColor?: string
   isOffline?: boolean
+  onSelect: (member: Member, anchor: { x: number; y: number }) => void
 }
 
-function MemberItem({ member, inVoice, roleColor, isOffline }: MemberItemProps) {
+function MemberItem({ member, inVoice, roleColor, isOffline, onSelect }: MemberItemProps) {
   const displayName = member.displayName || member.username
   const initial = (displayName || 'U')[0].toUpperCase()
 
   const roles = useServerStore((state) => state.roles)
+  const blocked = useBlockStore((state) => state.blocked.has(member.id))
   const userRole = roles.find(
     (r) => r.name?.toLowerCase() === member.role?.toLowerCase() || r.id === member.role
   )
 
   return (
-    <div
+    <button type="button"
+      onClick={(e) => { const rect = e.currentTarget.getBoundingClientRect(); onSelect(member, { x: rect.left - 290, y: rect.top }) }}
       className={`
-        w-full flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 group
+        w-full text-left flex items-center gap-2.5 px-2 py-1.5 rounded-md cursor-pointer transition-all duration-150 group
         ${isOffline ? 'opacity-55 hover:opacity-100' : 'hover:bg-[var(--color-bg-hover)]'}
+        ${blocked ? 'opacity-40' : ''}
       `}
       title={`${displayName} (${member.role})`}
     >
@@ -422,7 +447,7 @@ function MemberItem({ member, inVoice, roleColor, isOffline }: MemberItemProps) 
           }}
         >
           {member.avatarUrl ? (
-            <img
+            <PrivateImage
               src={getOptimizedImageUrl(member.avatarUrl, 64, 64)}
               alt={displayName}
               loading="lazy"
@@ -483,6 +508,6 @@ function MemberItem({ member, inVoice, roleColor, isOffline }: MemberItemProps) 
           </p>
         ) : null}
       </div>
-    </div>
+    </button>
   )
 }

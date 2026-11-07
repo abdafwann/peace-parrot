@@ -17,8 +17,11 @@ import {
   getSavedUserLocalMute,
 } from '../stores/voiceStore'
 import { useVoiceCleanup } from '../hooks/useVoice'
+import { useWebSocketStore } from '../stores/websocketStore'
 import { useChannelStore } from '../stores/channelStore'
 import { UserVolumePopover } from './UserVolumePopover'
+import { PrivateImage } from './PrivateImage'
+import { useBlockStore } from '../stores/blockStore'
 
 export function VoicePanel() {
   const isInVoice = useVoiceStore((state) => state.channelId !== null)
@@ -38,14 +41,6 @@ export function VoicePanel() {
     return state.channels.find(c => c.id === id)
   })
 
-  // Only show when in voice AND viewing a text channel
-  // When viewing a voice channel, participants are shown in the channel list instead
-  if (!isInVoice || activeChannel?.type === 'voice') {
-    return null
-  }
-
-  const participantCount = participants.size
-
   const [activeVolumeUser, setActiveVolumeUser] = useState<{
     userId: string
     displayName: string
@@ -54,6 +49,23 @@ export function VoicePanel() {
     anchorPosition: { x: number; y: number }
   } | null>(null)
 
+  // Only show when in voice AND viewing a text channel
+  // When viewing a voice channel, participants are shown in the channel list instead
+  if (!isInVoice || activeChannel?.type === 'voice') {
+    return null
+  }
+
+  const participantCount = participants.size
+  const sendVoiceState = () => {
+    const state = useVoiceStore.getState()
+    if (state.channelId) {
+      useWebSocketStore.getState().send({
+        type: 'voice_state_update',
+        channelId: state.channelId,
+        payload: { channelId: state.channelId, selfMuted: state.selfMuted, selfDeafened: state.selfDeafened },
+      })
+    }
+  }
   return (
     <div
       className="shrink-0"
@@ -80,7 +92,7 @@ export function VoicePanel() {
         <div className="flex items-center gap-1">
           {/* Voice controls */}
           <VoiceControlButton
-            onClick={() => setSelfMuted(!selfMuted)}
+            onClick={() => { setSelfMuted(!selfMuted); sendVoiceState() }}
             isActive={!selfMuted}
             isDanger={selfMuted}
             title={selfMuted ? 'Unmute' : 'Mute'}
@@ -89,7 +101,7 @@ export function VoicePanel() {
           </VoiceControlButton>
 
           <VoiceControlButton
-            onClick={() => setSelfDeafened(!selfDeafened)}
+            onClick={() => { setSelfDeafened(!selfDeafened); sendVoiceState() }}
             isActive={!selfDeafened}
             isDanger={selfDeafened}
             title={selfDeafened ? 'Undeafen' : 'Deafen'}
@@ -210,7 +222,6 @@ function VoiceControlButton({
   } else {
     className += ' bg-[var(--color-bg-tertiary)] text-white'
   }
-
   return (
     <button
       onClick={onClick}
@@ -226,6 +237,7 @@ interface VoiceParticipantCardProps {
   userId: string
   participant: {
     muted: boolean
+    adminMuted: boolean
     deafened: boolean
     isScreenSharing: boolean
     isSpeaking: boolean
@@ -238,6 +250,7 @@ interface VoiceParticipantCardProps {
 }
 
 function VoiceParticipantCard({ userId, participant, isSelf, onOpenVolume }: VoiceParticipantCardProps) {
+  const blocked = useBlockStore((state) => state.blocked.has(userId))
   const displayName = isSelf ? 'You' : participant.displayName || participant.username || `User ${userId.slice(0, 4)}`
   const userVol = !isSelf ? Math.round(getSavedUserVolume(userId) * 100) : 100
   const isLocallyMuted = !isSelf ? getSavedUserLocalMute(userId) : false
@@ -251,6 +264,7 @@ function VoiceParticipantCard({ userId, participant, isSelf, onOpenVolume }: Voi
       }}
       className={`group relative w-20 py-2 px-2 rounded-xl flex flex-col items-center gap-1 transition-all ${
         !isSelf ? 'cursor-pointer hover:bg-white/[0.08]' : ''
+      } ${blocked ? 'opacity-40' : ''
       }`}
       style={{ background: 'var(--color-bg-tertiary)' }}
       title={!isSelf ? 'Right click or click sliders to adjust user volume' : undefined}
@@ -264,7 +278,7 @@ function VoiceParticipantCard({ userId, participant, isSelf, onOpenVolume }: Voi
           style={{ background: participant.avatarUrl ? 'transparent' : 'linear-gradient(135deg, var(--color-brand), var(--color-parrot-cyan))' }}
         >
           {participant.avatarUrl ? (
-            <img src={participant.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+            <PrivateImage src={participant.avatarUrl} alt={displayName} className="w-full h-full object-cover" />
           ) : (
             displayName[0].toUpperCase()
           )}
@@ -276,15 +290,15 @@ function VoiceParticipantCard({ userId, participant, isSelf, onOpenVolume }: Voi
         )}
 
         {/* Muted indicator */}
-        {participant.muted && !participant.deafened && (
-          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center bg-[#ed4245] text-white">
+        {(participant.muted || participant.adminMuted) && (
+          <div title={participant.adminMuted ? 'Muted by admin' : 'Muted'} className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center bg-[#ed4245] text-white">
             <MicOff size={8} />
           </div>
         )}
 
         {/* Deafened indicator */}
         {participant.deafened && (
-          <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full flex items-center justify-center bg-[#ed4245] text-white">
+          <div className="absolute -bottom-0.5 -left-0.5 w-4 h-4 rounded-full flex items-center justify-center bg-[#ed4245] text-white">
             <HeadphoneOff size={8} />
           </div>
         )}

@@ -1,4 +1,9 @@
-// Global API & WebSocket Endpoint Configuration with Intelligent Auto-Fallback
+// Global API & WebSocket endpoint configuration
+import { useAuthStore } from '../stores/authStore'
+import { authenticatedRequestInit, shouldClearSession } from './authHeaders'
+import { isSecureServerURL } from './endpointSecurity'
+import { isCurrentSession } from './sessionGuard'
+import { probeServerHealth } from './serverHealth'
 
 export const APP_VERSION = '1.0.1'
 export const DEFAULT_LOCAL_URL = 'http://localhost:8080'
@@ -41,16 +46,8 @@ export function getApiBaseUrl(): string {
 }
 
 export const getWsUrl = (): string => {
-  const envWs = import.meta.env.VITE_WS_URL
-  if (envWs && typeof envWs === 'string' && envWs.trim() !== '') {
-    // If API_BASE_URL was auto-switched to localhost, WS should also use localhost
-    if (API_BASE_URL.includes('localhost:8080') || API_BASE_URL.includes('127.0.0.1:8080')) {
-      return 'ws://localhost:8080/ws'
-    }
-    return envWs
-  }
-
   const httpUrl = API_BASE_URL
+  if (!isSecureServerURL(httpUrl)) return ''
   if (httpUrl.startsWith('https://')) {
     return httpUrl.replace('https://', 'wss://') + '/ws'
   }
@@ -65,6 +62,7 @@ export let WS_BASE_URL = getWsUrl()
 
 export function setApiBaseUrl(newUrl: string, persistToStorage = false) {
   const clean = newUrl.trim().replace(/\/+$/, '')
+  if (!isSecureServerURL(clean)) throw new Error('Use HTTPS for remote servers; HTTP is only allowed on localhost.')
   API_BASE_URL = clean
   WS_BASE_URL = getWsUrl()
 
@@ -82,7 +80,7 @@ export function setApiBaseUrl(newUrl: string, persistToStorage = false) {
   }
 }
 
-// Auto-discovery & Fallback probe
+// Probe the configured backend without switching server identity.
 export async function probeAndAutoFallbackEndpoint(): Promise<string> {
   const primary = API_BASE_URL
 
@@ -92,19 +90,14 @@ export async function probeAndAutoFallbackEndpoint(): Promise<string> {
   }
 
   // 1. Probe primary endpoint (e.g. trycloudflare tunnel or custom remote domain)
-  let isPrimaryAlive = false
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 1800)
 
-    const res = await fetch(`${primary}/health`, {
-      signal: controller.signal,
-      headers: { 'Cache-Control': 'no-cache' },
-    })
+    const res = await probeServerHealth(primary, controller.signal)
     clearTimeout(timeoutId)
 
     if (res.ok) {
-      isPrimaryAlive = true
       console.log(`[Config] Primary backend (${primary}) is active and reachable.`)
       return primary
     }
@@ -112,37 +105,24 @@ export async function probeAndAutoFallbackEndpoint(): Promise<string> {
     console.warn(`[Config] Primary backend (${primary}) is unreachable:`, err)
   }
 
-  // 2. If primary is down, probe localhost:8080 fallback
-  if (!isPrimaryAlive) {
-    try {
-      const localController = new AbortController()
-      const localTimeout = setTimeout(() => localController.abort(), 1200)
-
-      const localRes = await fetch(`${DEFAULT_LOCAL_URL}/health`, {
-        signal: localController.signal,
-        headers: { 'Cache-Control': 'no-cache' },
-      })
-      clearTimeout(localTimeout)
-
-      if (localRes.ok) {
-        console.log(`[Config] 🔄 Primary tunnel down. Auto-switched to localhost fallback (${DEFAULT_LOCAL_URL})`)
-        setApiBaseUrl(DEFAULT_LOCAL_URL)
-        return DEFAULT_LOCAL_URL
-      }
-    } catch (localErr) {
-      console.warn(`[Config] Local backend fallback also unreachable:`, localErr)
-    }
-  }
-
+  // A failed probe must not silently switch the user's server or credentials.
   return primary
 }
 
 /**
- * Resilient fetch wrapper:
- * If the configured Cloudflare tunnel / remote endpoint fails (network error, timeout, or 502/503/504/530),
- * it seamlessly and automatically falls back to localhost:8080 and retries the request!
+ * Fetch from the selected server without silently replaying requests to another server.
  */
 export async function apiFetch(pathOrUrl: string, init?: RequestInit): Promise<Response> {
+  if (!isSecureServerURL(API_BASE_URL)) throw new Error('Use HTTPS for remote servers; HTTP is only allowed on localhost.')
+  const sessionToken = useAuthStore.getState().token
+  init = authenticatedRequestInit(pathOrUrl, init, sessionToken)
+  const authorization = new Headers(init?.headers).get('Authorization')
+  if (pathOrUrl.startsWith('/api/') && authorization && authorization !== `Bearer ${sessionToken}`) {
+    throw new Error('Request belongs to a different session')
+  }
+  if (new Headers(init?.headers).has('Authorization')) {
+    init = { ...init, redirect: 'error' }
+  }
   const resolveUrl = (baseUrl: string) => {
     if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
       return pathOrUrl
@@ -167,25 +147,24 @@ export async function apiFetch(pathOrUrl: string, init?: RequestInit): Promise<R
     const res = await fetch(primaryUrl, requestInit)
     if (timeoutId) clearTimeout(timeoutId)
 
-    // Check for Cloudflare tunnel downtime error codes (502, 503, 504, 530)
-    if (!res.ok && [502, 503, 504, 530].includes(res.status) && isRemote) {
-      console.warn(`[Config] Remote request returned ${res.status}. Falling back to ${DEFAULT_LOCAL_URL}`)
-      setApiBaseUrl(DEFAULT_LOCAL_URL)
-      const fallbackUrl = resolveUrl(DEFAULT_LOCAL_URL)
-      return await fetch(fallbackUrl, init)
+    if (pathOrUrl.startsWith('/api/') && authorization && sessionToken && !isCurrentSession(sessionToken, useAuthStore.getState().token)) {
+      throw new Error('Request belongs to a different session')
+    }
+
+    if (sessionToken && pathOrUrl.startsWith('/api/') && new Headers(init?.headers).has('Authorization')) {
+      let code: string | undefined
+      if (res.status === 403) {
+        const body = await res.clone().json().catch(() => null)
+        code = body?.error?.code
+      }
+      if (shouldClearSession(res.status, code) && useAuthStore.getState().token === sessionToken) {
+        useAuthStore.getState().logout()
+      }
     }
 
     return res
   } catch (err) {
     if (timeoutId) clearTimeout(timeoutId)
-
-    // Network / DNS / Connection refused / Timeout error on remote tunnel
-    if (isRemote) {
-      console.warn(`[Config] Network error requesting ${primaryUrl}. Auto-falling back to ${DEFAULT_LOCAL_URL}:`, err)
-      setApiBaseUrl(DEFAULT_LOCAL_URL)
-      const fallbackUrl = resolveUrl(DEFAULT_LOCAL_URL)
-      return await fetch(fallbackUrl, init)
-    }
     throw err
   }
 }

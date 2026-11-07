@@ -1,6 +1,9 @@
 // Web Audio API Soundboard Audio Engine & Synthesizer with Per-Sound Master Gain
 import { useSettingsStore } from '../stores/settingsStore'
 import { getApiBaseUrl } from './config'
+import { useAuthStore } from '../stores/authStore'
+import { localUploadPath } from './privateMediaPath'
+import { isSecureServerURL } from './endpointSecurity'
 
 export interface SoundboardItem {
   id: string
@@ -41,6 +44,54 @@ export const DEFAULT_SOUNDBOARD: SoundboardItem[] = [
 
 let audioCtx: AudioContext | null = null
 let currentPlayingAudio: HTMLAudioElement | null = null
+let currentAudioObjectURL: string | null = null
+let playbackGeneration = 0
+
+function stopCurrentAudio() {
+  playbackGeneration++
+  currentPlayingAudio?.pause()
+  currentPlayingAudio = null
+  if (currentAudioObjectURL) URL.revokeObjectURL(currentAudioObjectURL)
+  currentAudioObjectURL = null
+}
+
+async function playCustomAudio(url: string, volume: number) {
+  stopCurrentAudio()
+  const generation = playbackGeneration
+  const path = localUploadPath(url, getApiBaseUrl())
+  let objectURL: string | null = null
+  if (path) {
+    const token = useAuthStore.getState().token
+    if (!token || !isSecureServerURL(getApiBaseUrl())) return
+    const response = await fetch(`${getApiBaseUrl()}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      redirect: 'error',
+      cache: 'no-store',
+    })
+    if (!response.ok) throw new Error(`Audio request failed: ${response.status}`)
+    objectURL = URL.createObjectURL(await response.blob())
+  }
+  if (generation !== playbackGeneration) {
+    if (objectURL) URL.revokeObjectURL(objectURL)
+    return
+  }
+  const audio = new Audio(objectURL || url)
+  currentAudioObjectURL = objectURL
+  currentPlayingAudio = audio
+  audio.volume = volume
+  audio.onended = () => {
+    if (currentPlayingAudio === audio) stopCurrentAudio()
+  }
+  try {
+    await audio.play()
+  } catch (error) {
+    if (currentPlayingAudio === audio) stopCurrentAudio()
+    throw error
+  }
+  setTimeout(() => {
+    if (currentPlayingAudio === audio) stopCurrentAudio()
+  }, 10000)
+}
 
 function getAudioContext(): AudioContext {
   if (!audioCtx) {
@@ -60,9 +111,12 @@ let unsubscribeSettings: (() => void) | null = useSettingsStore.subscribe((state
   if (currentPlayingAudio) {
     currentPlayingAudio.volume = vol
     if (vol <= 0.005) {
-      currentPlayingAudio.pause()
+      stopCurrentAudio()
     }
   }
+})
+let unsubscribeAuth: (() => void) | null = useAuthStore.subscribe((state, previous) => {
+  if (state.token !== previous.token) stopCurrentAudio()
 })
 
 export function cleanupSoundboardAudio() {
@@ -70,10 +124,11 @@ export function cleanupSoundboardAudio() {
     unsubscribeSettings()
     unsubscribeSettings = null
   }
-  if (currentPlayingAudio) {
-    currentPlayingAudio.pause()
-    currentPlayingAudio = null
+  if (unsubscribeAuth) {
+    unsubscribeAuth()
+    unsubscribeAuth = null
   }
+  stopCurrentAudio()
   if (audioCtx && audioCtx.state !== 'closed') {
     audioCtx.close().catch(() => {})
     audioCtx = null
@@ -104,40 +159,8 @@ export function playSoundboardEffect(soundId: string, customUrl?: string) {
   if (customUrl) {
     const resolvedUrl = resolveAudioUrl(customUrl)
     if (resolvedUrl) {
-      try {
-        if (currentPlayingAudio) {
-          currentPlayingAudio.pause()
-          currentPlayingAudio = null
-        }
-
-        const audio = new Audio(resolvedUrl)
-        audio.volume = volRatio
-        currentPlayingAudio = audio
-        audio.play().catch((err) => {
-          console.warn('[Soundboard] Playback failed for:', resolvedUrl, err)
-        })
-
-        // Max 10s playback guard
-        setTimeout(() => {
-          if (currentPlayingAudio === audio && !audio.paused) {
-            const fadeInterval = setInterval(() => {
-              if (audio.volume > 0.05) {
-                audio.volume = Math.max(0, audio.volume - 0.05)
-              } else {
-                clearInterval(fadeInterval)
-                audio.pause()
-                audio.currentTime = 0
-                if (currentPlayingAudio === audio) {
-                  currentPlayingAudio = null
-                }
-              }
-            }, 40)
-          }
-        }, 10000)
-        return
-      } catch {
-        // fallback
-      }
+      playCustomAudio(resolvedUrl, volRatio).catch((err) => console.warn('[Soundboard] Playback failed:', err))
+      return
     }
   }
 

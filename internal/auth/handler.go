@@ -17,6 +17,7 @@ type AuthHandler struct {
 	userStore   *user.Store
 	inviteStore *invite.Store
 	jwtMgr      *JWTManager
+	bans        BanChecker
 	rateLimit   *RateLimiter
 }
 
@@ -36,16 +37,17 @@ type RegisterRequest struct {
 
 // AuthResponse represents auth success response
 type AuthResponse struct {
-	Token string       `json:"token"`
-	User  user.User    `json:"user"`
+	Token string    `json:"token"`
+	User  user.User `json:"user"`
 }
 
 // NewAuthHandler creates a new auth handler
-func NewAuthHandler(store *user.Store, inviteStore *invite.Store, jwtMgr *JWTManager) *AuthHandler {
+func NewAuthHandler(store *user.Store, inviteStore *invite.Store, jwtMgr *JWTManager, bans BanChecker) *AuthHandler {
 	return &AuthHandler{
 		userStore:   store,
 		inviteStore: inviteStore,
 		jwtMgr:      jwtMgr,
+		bans:        bans,
 		rateLimit:   NewRateLimiter(DefaultRateLimit, DefaultRateWindow),
 	}
 }
@@ -80,6 +82,16 @@ func (h *AuthHandler) Login(c echo.Context) error {
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.Password)); err != nil {
 		return middleware.WriteError(c, http.StatusUnauthorized, "INVALID_CREDENTIALS", "Invalid username or password", nil)
+	}
+	if h.bans == nil {
+		return middleware.WriteError(c, http.StatusServiceUnavailable, "MODERATION_UNAVAILABLE", "Unable to check account status", nil)
+	}
+	banned, err := h.bans.IsUserBanned(u.ID)
+	if err != nil {
+		return middleware.WriteError(c, http.StatusServiceUnavailable, "MODERATION_UNAVAILABLE", "Unable to check account status", nil)
+	}
+	if banned {
+		return middleware.WriteError(c, http.StatusForbidden, "USER_BANNED", "Account is banned", nil)
 	}
 
 	// Generate token

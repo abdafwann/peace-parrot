@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { VolumeX, MicOff, RotateCcw, X, Sliders } from 'lucide-react'
+import { PrivateImage } from './PrivateImage'
 import {
   useVoiceStore,
   getSavedUserVolume,
@@ -124,7 +125,7 @@ export function UserVolumePopover({
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-emerald-500 to-sky-500 flex items-center justify-center text-xs font-bold text-white overflow-hidden shrink-0">
             {avatarUrl ? (
-              <img src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
+              <PrivateImage src={avatarUrl} alt={displayName} className="w-full h-full object-cover" />
             ) : (
               (displayName || 'U')[0].toUpperCase()
             )}
